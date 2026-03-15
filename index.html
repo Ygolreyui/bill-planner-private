@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Bill / Paycheck Planner</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2d6cdf" />
+</head>
+<body>
+  <div class="app-shell">
+    <div class="app shell">
+      <header class="app-header">
+        <div class="app-header-top">
+          <div>
+            <p class="eyebrow">Personal Finance Planner</p>
+            <h1>Bill / Paycheck Planner</h1>
+            <p class="app-header-text">
+              Plan bills, forecast balances, and see what money is safe to spend.
+            </p>
+          </div>
+          <div class="save-indicator-wrap">
+            <p class="save-indicator" id="saveIndicator">Changes save automatically on this device.</p>
+          </div>
+        </div>
+      </header>
+
+    <nav class="tab-nav" aria-label="Primary">
+      <button type="button" class="tab-btn active" data-tab="dashboardTab" aria-label="Dashboard">
+        <span class="tab-btn-icon">🏠</span>
+        <span class="tab-btn-label">Today</span>
+      </button>
+
+      <button type="button" class="tab-btn" data-tab="billsTab" aria-label="Bills">
+        <span class="tab-btn-icon">💳</span>
+        <span class="tab-btn-label">Bills</span>
+      </button>
+
+      <button type="button" class="tab-btn" data-tab="forecastTab" aria-label="Forecast">
+        <span class="tab-btn-icon">📈</span>
+        <span class="tab-btn-label">Plan</span>
+      </button>
+
+      <button type="button" class="tab-btn" data-tab="moreTab" aria-label="More">
+        <span class="tab-btn-icon">⚙️</span>
+        <span class="tab-btn-label">Tools</span>
+      </button>
+    </nav>
+
+    <!-- DASHBOARD TAB -->
+    <div id="dashboardTab" class="tab-content active">
+      <div class="dashboard-stage">
+        <section class="page-intro-card today-intro-card app-hero-card">
+          <div>
+            <p class="page-intro-eyebrow">Today</p>
+            <h2>Your financial command center</h2>
+            <p>See where you stand, what needs attention next, and open deeper tools only when you need them.</p>
+          </div>
+        </section>
+
+        <section class="today-quick-card" aria-label="Today quick actions">
+          <div class="today-quick-heading">
+            <div>
+              <p class="mini-eyebrow">Quick Actions</p>
+              <h3>Go straight to the next move</h3>
+            </div>
+            <span class="today-quick-caption">Designed to feel fast on phone and web.</span>
+          </div>
+          <div class="today-quick-rail">
+            <button type="button" class="today-action-chip" data-quick-action="today-setup">Update Setup</button>
+            <button type="button" class="today-action-chip" data-quick-action="bills-add">Add Bill</button>
+            <button type="button" class="today-action-chip" data-quick-action="plan-scenario">Test Scenario</button>
+            <button type="button" class="today-action-chip" data-quick-action="work-planner">Work Hours</button>
+          </div>
+        </section>
+
+        <section class="today-hero-grid">
+          <section class="card financial-status-card" id="financialStatusCard">
+            <div class="section-heading">
+              <h2>Financial Status</h2>
+              <span class="section-subtitle">Your top-level decision view for this pay cycle.</span>
+            </div>
+            <div id="financialStatusSummary"></div>
+          </section>
+
+          <section class="card today-focus-card today-focus-card-primary">
+            <div class="today-focus-header">
+              <div>
+                <p class="mini-eyebrow">Available Right Now</p>
+                <h3>Safe to spend</h3>
+              </div>
+              <span class="today-focus-badge">Live</span>
+            </div>
+
+            <div class="today-focus-value" id="safeSpendBannerValue">$0.00</div>
+
+            <div class="today-focus-meta">
+              <div class="today-meta-item">
+                <span class="today-meta-label">Daily safe spending</span>
+                <span class="today-meta-value" id="safeSpendDailyBannerValue">$0.00</span>
+              </div>
+              <div class="today-meta-item">
+                <span class="today-meta-label">Current balance</span>
+                <span class="today-meta-value" id="dashboardCurrentBalance">$0.00</span>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="card starter-guide-card hidden" id="starterGuideCard">
+          <div class="section-heading">
+            <h2>Quick Start Guide</h2>
+            <span class="section-subtitle">A calmer first-run path so new users always know the next best step.</span>
+          </div>
+          <div id="starterGuideSummary"></div>
+        </section>
+
+        <section class="today-glance-grid">
+          <section class="card today-mini-card">
+            <p class="mini-eyebrow">Before Payday</p>
+            <h3>Bills before payday</h3>
+
+            <div class="today-mini-row">
+              <span>Bills due</span>
+              <strong id="totalDue">$0.00</strong>
+            </div>
+
+            <div class="today-mini-row">
+              <span>Projected before paycheck</span>
+              <strong id="projectedBeforePaycheck">$0.00</strong>
+            </div>
+          </section>
+
+          <section class="card today-mini-card">
+            <p class="mini-eyebrow">Next Paycheck</p>
+            <h3>Next paycheck</h3>
+
+            <div class="today-mini-row">
+              <span>Expected amount</span>
+              <strong id="dashboardNextPayAmount">$0.00</strong>
+            </div>
+
+            <div class="today-mini-row">
+              <span>Days until payday</span>
+              <strong id="daysUntilPayday">0</strong>
+            </div>
+          </section>
+
+          <section class="card today-mini-card">
+            <p class="mini-eyebrow">After Payday</p>
+            <h3>After paycheck</h3>
+
+            <div class="today-mini-row">
+              <span>Projected after paycheck</span>
+              <strong id="projectedAfterPaycheck">$0.00</strong>
+            </div>
+
+            <div class="today-mini-row">
+              <span>Daily safe spending</span>
+              <strong id="dailySafeSpend">$0.00</strong>
+            </div>
+          </section>
+
+          <section class="card today-mini-card today-mini-card-accent">
+            <p class="mini-eyebrow">Quick Guidance</p>
+            <h3>What to do next</h3>
+            <p class="today-mini-copy">Review upcoming bills first. If this section gets tight, update setup before making extra debt or fun-money decisions.</p>
+            <div class="today-mini-pill" id="safeToSpend">$0.00</div>
+          </section>
+        </section>
+
+        <section class="card today-priority-card">
+          <div class="section-heading">
+            <h2>Upcoming Bills Before Payday</h2>
+            <span class="section-subtitle">The bills most likely to affect your short-term cash flow.</span>
+          </div>
+          <div id="upcomingBillsList"></div>
+        </section>
+
+        <div class="dashboard-section-label">
+          <p>Plan &amp; Adjust</p>
+          <span>Keep the essentials close. Open setup only when something changes.</span>
+        </div>
+
+        <section class="today-secondary-grid">
+          <section class="card quick-plan-card" data-collapsible="true" data-collapse-key="today-setup" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Today Setup</h2>
+              <span class="section-subtitle">Update balances and your next paycheck whenever something changes.</span>
+            </div>
+
+            <div id="cashFlowWarningCard" class="cash-flow-warning-card hidden">
+              <h3 class="cash-flow-warning-title">Cash Flow Warning</h3>
+              <div id="cashFlowWarningMessage"></div>
+            </div>
+
+            <div class="compact-form-grid">
+              <div class="form-group">
+                <label for="currentBalance">Current Balance</label>
+                <input type="number" id="currentBalance" placeholder="Enter current balance" />
+              </div>
+
+              <div class="form-group">
+                <label for="nextPayDate">Next Paycheck Date</label>
+                <input type="date" id="nextPayDate" />
+              </div>
+
+              <div class="form-group">
+                <label for="nextPayAmount">Next Paycheck Amount</label>
+                <input type="number" id="nextPayAmount" placeholder="Enter paycheck amount" />
+              </div>
+
+              <div class="form-group">
+                <label for="payFrequency">Pay Frequency</label>
+                <select id="payFrequency">
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Biweekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section class="card today-helper-card" data-collapsible="true" data-collapse-key="forecast-source" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Forecast Pay Source</h2>
+              <span class="section-subtitle">See whether the planner is using your manual paycheck or your income scenario.</span>
+            </div>
+            <div id="forecastPaySourceMessage"></div>
+          </section>
+        </section>
+
+        <div class="dashboard-section-label">
+          <p>Advanced Insights</p>
+          <span>Powerful tools, intentionally tucked away until you need them.</span>
+        </div>
+
+        <div class="dashboard-insight-grid">
+          <section class="card work-planner-card" id="workPlannerCard" data-collapsible="true" data-collapse-key="today-work-planner" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Work Planner</h2>
+              <span class="section-subtitle">Estimate how many hours you need this week to cover your next stretch and stay on target.</span>
+            </div>
+
+            <div class="compact-form-grid work-planner-grid">
+              <div class="form-group">
+                <label for="workHourlyRate">Hourly Rate</label>
+                <input type="number" id="workHourlyRate" placeholder="Enter hourly rate" step="0.01" />
+              </div>
+
+              <div class="form-group">
+                <label for="workBaseHours">Regular Hours Before OT</label>
+                <input type="number" id="workBaseHours" placeholder="40" step="0.25" value="40" />
+              </div>
+
+              <div class="form-group">
+                <label for="workOtMultiplier">OT Multiplier</label>
+                <input type="number" id="workOtMultiplier" placeholder="1.5" step="0.1" value="1.5" />
+              </div>
+
+              <div class="form-group">
+                <label for="workTargetBuffer">Target Buffer After Paycheck</label>
+                <input type="number" id="workTargetBuffer" placeholder="Example: 250" step="0.01" value="0" />
+              </div>
+
+              <div class="form-group">
+                <label for="workExtraGoal">Extra Goal This Paycheck</label>
+                <input type="number" id="workExtraGoal" placeholder="Extra debt or savings target" step="0.01" value="0" />
+              </div>
+
+              <div class="form-group">
+                <label for="workNetRetention">Net Keep % (Optional)</label>
+                <input type="number" id="workNetRetention" placeholder="Auto estimate" min="1" max="100" step="1" />
+              </div>
+            </div>
+
+            <div id="workPlannerSummary"></div>
+          </section>
+
+          <section class="card readiness-card" id="todayReadinessCard" data-collapsible="true" data-collapse-key="today-readiness-ladder" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Payday Readiness Ladder</h2>
+              <span class="section-subtitle">See how far you are from a safer after-paycheck cushion and how much extra work it may take to get there.</span>
+            </div>
+            <div id="paydayReadinessSummary"></div>
+          </section>
+
+          <section class="card allocation-plan-card" id="todayAllocationCard" data-collapsible="true" data-collapse-key="today-paycheck-allocation" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Paycheck Allocation Plan</h2>
+              <span class="section-subtitle">A smart payday breakdown that reacts when you are short, tight, or finally have room to save or attack debt.</span>
+            </div>
+            <div id="paycheckAllocationSummary"></div>
+          </section>
+
+          <section class="card chart-card" data-collapsible="true" data-collapse-key="dashboard-category-chart" data-collapsed="true">
+            <h2>Category Spending Chart (Before Payday)</h2>
+            <div class="chart-wrap">
+              <canvas id="categoryChart"></canvas>
+            </div>
+          </section>
+
+          <section class="card" data-collapsible="true" data-collapse-key="dashboard-category-totals" data-collapsed="true">
+            <h2>Category Totals (Before Payday)</h2>
+            <div id="categoryTotals"></div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- BILLS TAB -->
+    <div id="billsTab" class="tab-content">
+      <section class="page-intro-card bills-intro-card">
+        <div>
+          <p class="page-intro-eyebrow">Bills</p>
+          <h2>Keep recurring expenses organized without the clutter</h2>
+          <p>Use this screen to add bills, narrow down what matters this week, and review your unpaid commitments in one place.</p>
+        </div>
+      </section>
+
+      <section class="bills-snapshot-grid">
+        <article class="card bills-snapshot-card bills-snapshot-card-primary">
+          <p class="mini-eyebrow">Bills Command Center</p>
+          <h3>Stay ahead of due dates</h3>
+          <p class="bills-snapshot-text">Review the overview first, then expand only the setup tools you need right now.</p>
+          <div class="bills-quick-links" aria-label="Bills shortcuts">
+            <a href="#billsOverviewCard" class="bills-quick-link">Overview</a>
+            <a href="#billListCard" class="bills-quick-link">All Bills</a>
+            <a href="#billEntryCard" class="bills-quick-link">Add Bill</a>
+            <a href="#billFiltersCard" class="bills-quick-link">Filters</a>
+          </div>
+        </article>
+
+        <article class="card bills-snapshot-card bills-snapshot-card-secondary">
+          <p class="mini-eyebrow">Recommended Flow</p>
+          <ol class="bills-flow-list">
+            <li>Check your overview for pressure points.</li>
+            <li>Open filters if you need to isolate due-soon or overdue bills.</li>
+            <li>Use Add Bill only when something new changes.</li>
+          </ol>
+        </article>
+      </section>
+
+      <section class="card" id="billsOverviewCard">
+        <div class="section-heading section-heading-row">
+          <div>
+            <p class="mini-eyebrow">Overview</p>
+            <h2>Bills snapshot</h2>
+          </div>
+          <span class="section-subtitle">A fast view of what is paid, unpaid, overdue, or due soon</span>
+        </div>
+        <div id="billsOverview" class="overview-grid"></div>
+      </section>
+
+      <details class="card card-collapsible bill-filter-card" id="billFiltersCard">
+        <summary class="collapsible-summary">
+          <div>
+            <p class="mini-eyebrow">Focus View</p>
+            <h2>Search &amp; filter bills</h2>
+          </div>
+          <span class="section-subtitle">Open only when you need to narrow the list</span>
+        </summary>
+
+        <div class="collapsible-body">
+          <div class="bill-filter-grid compact-two-col">
+            <div class="form-group">
+              <label for="billSearch">Search by Name</label>
+              <input type="text" id="billSearch" placeholder="Search bills..." />
+            </div>
+
+            <div class="form-group">
+              <label for="filterCategory">Filter by Category</label>
+              <select id="filterCategory">
+                <option value="all">All Categories</option>
+                <option value="housing">Housing</option>
+                <option value="utilities">Utilities</option>
+                <option value="debt">Debt</option>
+                <option value="subscriptions">Subscriptions</option>
+                <option value="insurance">Insurance</option>
+                <option value="transportation">Transportation</option>
+                <option value="food">Food</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="filterStatus">Filter by Status</label>
+              <select id="filterStatus">
+                <option value="all">All Bills</option>
+                <option value="unpaid">Unpaid Only</option>
+                <option value="paid">Paid Only</option>
+                <option value="overdue">Overdue</option>
+                <option value="due-soon">Due Soon</option>
+                <option value="future">Future</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <section class="card" id="billListCard">
+        <div class="section-heading section-heading-row">
+          <div>
+            <p class="mini-eyebrow">Bill List</p>
+            <h2>Your bills</h2>
+          </div>
+          <span class="section-subtitle">Track recurring items and check upcoming due dates in one scroll</span>
+        </div>
+        <ul id="billList"></ul>
+      </section>
+
+      <details class="card card-collapsible bill-form-card" id="billEntryCard">
+        <summary class="collapsible-summary">
+          <div>
+            <p class="mini-eyebrow">Setup</p>
+            <h2 id="billFormTitle">Add or edit a bill</h2>
+          </div>
+          <span class="section-subtitle">Keep this tucked away until you need it</span>
+        </summary>
+
+        <div class="collapsible-body">
+          <div class="bill-form-grid">
+            <div class="form-group bill-form-name">
+              <label for="billName">Name</label>
+              <input type="text" id="billName" placeholder="Example: Car Insurance" />
+            </div>
+
+            <div class="form-group">
+              <label for="billAmount">Amount</label>
+              <input type="number" id="billAmount" placeholder="Enter amount" />
+            </div>
+
+            <div class="form-group">
+              <label for="billDueDate">Due Date</label>
+              <input type="date" id="billDueDate" />
+            </div>
+
+            <div class="form-group">
+              <label for="billCategory">Category</label>
+              <select id="billCategory">
+                <option value="housing">Housing</option>
+                <option value="utilities">Utilities</option>
+                <option value="debt">Debt</option>
+                <option value="subscriptions">Subscriptions</option>
+                <option value="insurance">Insurance</option>
+                <option value="transportation">Transportation</option>
+                <option value="food">Food</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="billFrequency">Frequency</label>
+              <select id="billFrequency">
+                <option value="one-time">One-Time</option>
+                <option value="monthly">Monthly</option>
+                <option value="weekly">Weekly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="billPriority">Priority</label>
+              <select id="billPriority">
+                <option value="critical">Critical</option>
+                <option value="important" selected>Important</option>
+                <option value="flexible">Flexible</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-buttons">
+            <button id="addBillBtn" type="button">Save Bill</button>
+            <button id="cancelEditBtn" type="button" class="secondary-btn hidden">Cancel Edit</button>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- FORECAST TAB -->
+    <div id="forecastTab" class="tab-content">
+      <section class="page-intro-card plan-intro-card">
+        <div>
+          <p class="page-intro-eyebrow">Plan</p>
+          <h2>Make your next move before money gets tight</h2>
+          <p>Use this page to forecast your next stretch, pressure-test your plan, and decide what to do before bills and surprises hit.</p>
+        </div>
+      </section>
+
+      <section class="tab-intro-strip plan-intro-strip">
+        <div>
+          <h2 class="tab-intro-title">Planning Center</h2>
+          <p class="tab-intro-text">Start with the summary, check the timeline, then open deeper controls only when you need them.</p>
+        </div>
+      </section>
+
+      <section class="jump-chip-rail plan-jump-rail" aria-label="Plan quick links">
+        <a class="jump-chip" href="#planOverviewCard">Overview</a>
+        <a class="jump-chip" href="#planTimelineCard">Timeline</a>
+        <a class="jump-chip" href="#planAssignmentsCard">Assignments</a>
+        <a class="jump-chip" href="#planScenariosCard">Scenarios</a>
+        <a class="jump-chip" href="#planForecastChartCard">Balance Chart</a>
+      </section>
+
+      <section id="planOverviewCard" class="plan-overview-grid">
+        <section class="card plan-summary-card plan-source-card">
+          <div class="section-heading">
+            <h2>Forecast Source</h2>
+            <span class="section-subtitle">What this plan is currently using</span>
+          </div>
+          <div id="forecastPaySourceMessageForecast"></div>
+        </section>
+
+        <section class="card plan-summary-card plan-risk-card">
+          <div class="section-heading">
+            <h2>Shared + Event Impact</h2>
+            <span class="section-subtitle">How split bills and life events affect the forecast</span>
+          </div>
+          <div id="forecastPlanningInsights"></div>
+        </section>
+
+        <section class="card plan-summary-card plan-allocation-card">
+          <div class="section-heading">
+            <h2>Allocation Mode</h2>
+            <span class="section-subtitle">Choose how paychecks get assigned</span>
+          </div>
+
+          <div class="form-group compact-form-group">
+            <label for="allocationMode">Assignment style</label>
+            <select id="allocationMode">
+              <option value="normal">Normal Mode</option>
+              <option value="survival">Survival Mode</option>
+            </select>
+          </div>
+
+          <p class="section-helper compact-helper">
+            Survival Mode funds critical bills first, then important bills, and only covers flexible bills if money is left.
+          </p>
+        </section>
+
+        <section id="planScenariosCard" class="card plan-summary-card plan-scenario-card" data-collapsible="true" data-collapse-key="forecast-stress" data-collapsed="true">
+          <div class="section-heading">
+            <h2>Scenario Test</h2>
+            <span class="section-subtitle">Check common “what if” situations without changing your saved plan</span>
+          </div>
+
+          <div class="form-group compact-form-group">
+            <label for="stressTestMode">Scenario</label>
+            <select id="stressTestMode">
+              <option value="none">No Stress Test</option>
+              <option value="low-pay">Lower Paycheck</option>
+              <option value="late-pay">Late Paycheck</option>
+              <option value="surprise-expense">Unexpected Expense</option>
+            </select>
+          </div>
+
+          <div class="plan-stress-grid">
+            <div class="form-group compact-form-group">
+              <label for="stressTestAmount">Stress Amount</label>
+              <input type="number" id="stressTestAmount" placeholder="Example: 200" />
+            </div>
+
+            <div class="form-group compact-form-group">
+              <label for="stressTestDays">Late Paycheck Delay (Days)</label>
+              <input type="number" id="stressTestDays" placeholder="Example: 3" />
+            </div>
+          </div>
+
+          <div id="stressTestMessage"></div>
+        </section>
+      </section>
+
+      <section class="forecast-top-layout plan-main-layout">
+        <section id="planTimelineCard" class="card forecast-main-card plan-timeline-card">
+          <div class="section-heading">
+            <h2>Pay Period Timeline</h2>
+            <span class="section-subtitle">See what happens between now and your next paycheck</span>
+          </div>
+          <div id="timelineList"></div>
+        </section>
+
+        <div class="forecast-side-stack plan-side-stack">
+          <section id="planAssignmentsCard" class="card" data-collapsible="true" data-collapse-key="forecast-assignments" data-collapsed="false">
+            <div class="section-heading">
+              <h2>Paycheck Assignments</h2>
+              <span class="section-subtitle">See what each paycheck is expected to cover</span>
+            </div>
+            <div id="paycheckAssignments"></div>
+          </section>
+
+          <section class="card" data-collapsible="true" data-collapse-key="forecast-multi" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Multi-Paycheck Forecast</h2>
+              <span class="section-subtitle">Stretch your plan across multiple paychecks</span>
+            </div>
+            <div id="forecastTimeline"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="planForecastChartCard" class="card chart-card" data-collapsible="true" data-collapse-key="forecast-chart" data-collapsed="true">
+        <div class="section-heading">
+          <h2>Projected Balance Over Time</h2>
+          <span class="section-subtitle">Watch where your balance likely rises and falls</span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="balanceForecastChart"></canvas>
+        </div>
+      </section>
+    </div>
+
+    <!-- MORE TAB -->
+    <div id="moreTab" class="tab-content">
+      <section class="page-intro-card">
+        <div>
+          <p class="page-intro-eyebrow">Tools</p>
+          <h2>Open advanced tools only when you need them</h2>
+          <p>This page holds your heavier planning modules. Keep it calm by opening one tool at a time.</p>
+        </div>
+      </section>
+
+      <section class="tool-rail-card">
+        <div class="tool-rail">
+          <a href="#incomePlanningCard" class="tool-chip">Income</a>
+          <a href="#sharedSplitCard" class="tool-chip">Shared Split</a>
+          <a href="#debtStrategyCard" class="tool-chip">Debt</a>
+          <a href="#lifeEventsCard" class="tool-chip">Life Events</a>
+          <a href="#backupRestoreCard" class="tool-chip">Backup</a>
+        </div>
+      </section>
+      <section class="tab-intro-strip">
+        <div>
+          <h2 class="tab-intro-title">Advanced Tools</h2>
+          <p class="tab-intro-text">This tab now keeps setup and simulator tools collapsed by default so the app feels lighter.</p>
+        </div>
+      </section>
+      <section class="more-top-layout">
+        <div class="more-main-stack">
+          <section class="card more-feature-card" id="incomePlanningCard" data-collapsible="true" data-collapse-key="more-income" data-collapsed="false">
+            <div class="section-heading">
+              <h2>Income Planning</h2>
+              <span class="section-subtitle">Model your next paycheck using base net pay and overtime scenarios</span>
+            </div>
+
+            <div class="income-planning-grid">
+              <div class="form-group">
+                <label for="baseNetPay">Base Net Pay</label>
+                <input type="number" id="baseNetPay" placeholder="Enter base net pay" />
+              </div>
+
+              <div class="form-group">
+                <label for="expectedOtNet">Expected OT Net Add-On</label>
+                <input type="number" id="expectedOtNet" placeholder="Enter expected OT net amount" />
+              </div>
+
+              <div class="form-group">
+                <label for="incomeScenario">Income Scenario</label>
+                <select id="incomeScenario">
+                  <option value="conservative">Conservative</option>
+                  <option value="realistic" selected>Realistic</option>
+                  <option value="aggressive">Aggressive</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="useIncomeScenarioForForecast">Forecast Paycheck Source</label>
+                <select id="useIncomeScenarioForForecast">
+                  <option value="manual">Use Manual Next Paycheck Amount</option>
+                  <option value="scenario">Use Income Scenario Automatically</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Quick OT Presets</label>
+              <div class="form-buttons">
+                <button id="presetLowOtBtn" type="button" class="secondary-btn">Low OT Week</button>
+                <button id="presetNormalOtBtn" type="button" class="secondary-btn">Normal OT Week</button>
+                <button id="presetHeavyOtBtn" type="button" class="secondary-btn">Heavy OT Week</button>
+              </div>
+            </div>
+
+            <div class="form-buttons">
+              <button id="useEstimatorAverageBtn" type="button">Use Estimator Average Net → Base Net</button>
+              <button id="useManualNextPayBtn" type="button">Use Manual Next Paycheck → Base Net</button>
+              <button id="copyScenarioToManualBtn" type="button">Copy Scenario Amount → Next Paycheck</button>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Income Scenario Results</h3>
+              <div id="incomeScenarioResults"></div>
+            </div>
+
+            <div class="income-preview-card">
+              <h3>Income Planning Preview</h3>
+              <div id="incomePlanningPreview"></div>
+            </div>
+
+            <div class="form-buttons">
+              <button id="applyIncomeScenarioBtn" type="button">Use Scenario for Next Paycheck</button>
+            </div>
+          </section>
+
+
+          <section class="card" id="sharedSplitCard" data-collapsible="true" data-collapse-key="more-household" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Shared Household Split</h2>
+              <span class="section-subtitle">Tell the planner which categories are shared and what portion you cover</span>
+            </div>
+
+            <div class="compact-form-grid household-form-grid">
+              <div class="form-group">
+                <label for="householdMyShare">My Share %</label>
+                <input type="number" id="householdMyShare" min="0" max="100" step="1" value="70" placeholder="70" />
+              </div>
+
+              <div class="form-group">
+                <label for="householdPartnerShare">Partner Share %</label>
+                <input type="number" id="householdPartnerShare" min="0" max="100" step="1" value="30" placeholder="30" />
+              </div>
+
+              <div class="form-group checkbox-group-inline">
+                <label class="checkbox-row checkbox-row-strong">
+                  <input type="checkbox" id="applyHouseholdSplit" checked />
+                  <span>Apply split inside dashboard, timeline, and forecast calculations</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="section-subtitle section-subtitle-block">Shared categories</div>
+            <div class="shared-category-grid">
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="housing" checked /> <span>Housing</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="utilities" checked /> <span>Utilities</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="food" checked /> <span>Food</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="transportation" checked /> <span>Transportation</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="insurance" checked /> <span>Insurance</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="subscriptions" /> <span>Subscriptions</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="other" /> <span>Other</span></label>
+              <label class="checkbox-row"><input type="checkbox" class="shared-category-toggle" data-category="debt" /> <span>Debt</span></label>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Shared Split Summary</h3>
+              <div id="householdSplitSummary"></div>
+            </div>
+          </section>
+
+          <section class="card" id="debtStrategyCard" data-collapsible="true" data-collapse-key="more-debt" data-collapsed="false">
+            <div class="section-heading">
+              <h2>Debt Strategy</h2>
+              <span class="section-subtitle">Track balances, payoff targets, and see which debt should be attacked next</span>
+            </div>
+
+            <div class="compact-form-grid debt-form-grid">
+              <div class="form-group">
+                <label for="debtName">Debt Name</label>
+                <input type="text" id="debtName" placeholder="Example: Credit Card" />
+              </div>
+
+              <div class="form-group">
+                <label for="debtBalance">Current Balance</label>
+                <input type="number" id="debtBalance" placeholder="Enter balance" />
+              </div>
+
+              <div class="form-group">
+                <label for="debtApr">APR %</label>
+                <input type="number" id="debtApr" placeholder="Example: 24.99" step="0.01" />
+              </div>
+
+              <div class="form-group">
+                <label for="debtMinPayment">Minimum Payment</label>
+                <input type="number" id="debtMinPayment" placeholder="Enter minimum payment" />
+              </div>
+
+              <div class="form-group">
+                <label for="debtExtraPayment">Extra Monthly Payment</label>
+                <input type="number" id="debtExtraPayment" placeholder="Optional extra payment" />
+              </div>
+
+              <div class="form-group">
+                <label for="debtPriority">Priority</label>
+                <select id="debtPriority">
+                  <option value="high-interest">High Interest</option>
+                  <option value="small-balance">Small Balance</option>
+                  <option value="required">Required</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-buttons">
+              <button id="addDebtBtn" type="button">Add Debt</button>
+              <button id="cancelDebtEditBtn" type="button" class="secondary-btn hidden">Cancel Edit</button>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Debt Planner Summary</h3>
+              <div id="debtPlannerSummary"></div>
+            </div>
+
+            <ul id="debtList" class="planner-list"></ul>
+          </section>
+
+          <section class="card" id="lifeEventsCard" data-collapsible="true" data-collapse-key="more-events" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Life Event Simulator</h2>
+              <span class="section-subtitle">Model surprise expenses, missed work, and one-time boosts without breaking your plan</span>
+            </div>
+
+            <div class="compact-form-grid life-event-settings-grid">
+              <div class="form-group">
+                <label for="emergencySavingsBalance">Emergency Savings Balance</label>
+                <input type="number" id="emergencySavingsBalance" placeholder="Enter emergency savings" />
+              </div>
+
+              <div class="form-group">
+                <label for="emergencyFloor">Emergency Fund Floor</label>
+                <input type="number" id="emergencyFloor" placeholder="Example: 4000" />
+              </div>
+            </div>
+
+            <div class="compact-form-grid life-event-form-grid">
+              <div class="form-group">
+                <label for="lifeEventName">Event Name</label>
+                <input type="text" id="lifeEventName" placeholder="Example: Tires or Missed Work" />
+              </div>
+
+              <div class="form-group">
+                <label for="lifeEventType">Event Type</label>
+                <select id="lifeEventType">
+                  <option value="expense">Expense</option>
+                  <option value="income">Income Boost</option>
+                  <option value="missed-work">Missed Work</option>
+                  <option value="higher-bill">Higher Bill</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="lifeEventAmount">Amount</label>
+                <input type="number" id="lifeEventAmount" placeholder="Enter amount" />
+              </div>
+
+              <div class="form-group">
+                <label for="lifeEventDate">Event Date</label>
+                <input type="date" id="lifeEventDate" />
+              </div>
+
+              <div class="form-group">
+                <label for="lifeEventFunding">Funding Source</label>
+                <select id="lifeEventFunding">
+                  <option value="checking">Checking</option>
+                  <option value="savings">Savings</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-buttons">
+              <button id="addLifeEventBtn" type="button">Add Life Event</button>
+              <button id="cancelLifeEventEditBtn" type="button" class="secondary-btn hidden">Cancel Edit</button>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Life Event Summary</h3>
+              <div id="lifeEventSummary"></div>
+            </div>
+
+            <ul id="lifeEventList" class="planner-list"></ul>
+          </section>
+
+          <section class="card" data-collapsible="true" data-collapse-key="more-estimator-inputs" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Average Recent Paychecks</h2>
+              <span class="section-subtitle">Use recent checks to estimate your take-home pay</span>
+            </div>
+
+            <div class="paycheck-entry-grid">
+              <div class="paycheck-entry-card">
+                <h3>Paycheck 1</h3>
+
+                <div class="form-group">
+                  <label for="paycheck1Gross">Gross Pay</label>
+                  <input type="number" id="paycheck1Gross" placeholder="Enter gross pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck1Net">Net Pay</label>
+                  <input type="number" id="paycheck1Net" placeholder="Enter net pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck1Ot">Overtime Hours</label>
+                  <input type="number" id="paycheck1Ot" placeholder="Enter OT hours" step="0.1" />
+                </div>
+              </div>
+
+              <div class="paycheck-entry-card">
+                <h3>Paycheck 2</h3>
+
+                <div class="form-group">
+                  <label for="paycheck2Gross">Gross Pay</label>
+                  <input type="number" id="paycheck2Gross" placeholder="Enter gross pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck2Net">Net Pay</label>
+                  <input type="number" id="paycheck2Net" placeholder="Enter net pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck2Ot">Overtime Hours</label>
+                  <input type="number" id="paycheck2Ot" placeholder="Enter OT hours" step="0.1" />
+                </div>
+              </div>
+
+              <div class="paycheck-entry-card">
+                <h3>Paycheck 3</h3>
+
+                <div class="form-group">
+                  <label for="paycheck3Gross">Gross Pay</label>
+                  <input type="number" id="paycheck3Gross" placeholder="Enter gross pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck3Net">Net Pay</label>
+                  <input type="number" id="paycheck3Net" placeholder="Enter net pay" />
+                </div>
+
+                <div class="form-group">
+                  <label for="paycheck3Ot">Overtime Hours</label>
+                  <input type="number" id="paycheck3Ot" placeholder="Enter OT hours" step="0.1" />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card" data-collapsible="true" data-collapse-key="more-estimator-results" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Estimated Paycheck Results</h2>
+              <span class="section-subtitle">Average paycheck metrics based on your recent entries</span>
+            </div>
+
+            <div id="paycheckEstimateResults"></div>
+
+            <div class="form-buttons">
+              <button id="applyEstimatedPayBtn" type="button">Use Average Net for Next Paycheck</button>
+            </div>
+          </section>
+        </div>
+
+        <div class="more-side-stack">
+          <section class="card" data-collapsible="true" data-collapse-key="more-forecast-totals" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Forecast Category Totals</h2>
+              <span class="section-subtitle">Spending totals across the current forecast window</span>
+            </div>
+            <div id="forecastCategoryTotals"></div>
+          </section>
+
+          <section class="card chart-card" data-collapsible="true" data-collapse-key="more-forecast-chart" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Forecast Category Chart</h2>
+              <span class="section-subtitle">Visual breakdown of forecasted category spending</span>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="forecastCategoryChart"></canvas>
+            </div>
+          </section>
+
+          <section class="card" data-collapsible="true" data-collapse-key="more-buckets" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Spending Buckets</h2>
+              <span class="section-subtitle">Plan flexible spending like groceries, gas, and personal expenses</span>
+            </div>
+
+            <div class="form-group">
+              <label for="bucketName">Bucket Name</label>
+              <input type="text" id="bucketName" placeholder="Example: Groceries" />
+            </div>
+
+            <div class="form-group">
+              <label for="bucketAmount">Amount</label>
+              <input type="number" id="bucketAmount" placeholder="Enter amount" />
+            </div>
+
+            <div class="form-group">
+              <label for="bucketCategory">Category</label>
+              <select id="bucketCategory">
+                <option value="food">Food</option>
+                <option value="transportation">Transportation</option>
+                <option value="subscriptions">Subscriptions</option>
+                <option value="utilities">Utilities</option>
+                <option value="insurance">Insurance</option>
+                <option value="housing">Housing</option>
+                <option value="debt">Debt</option>
+                <option value="other" selected>Other</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="bucketFrequency">Frequency</label>
+              <select id="bucketFrequency">
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+
+            <div class="form-buttons">
+              <button id="addBucketBtn" type="button">Add Bucket</button>
+              <button id="cancelBucketEditBtn" type="button" class="secondary-btn hidden">Cancel Edit</button>
+            </div>
+
+            <ul id="bucketList"></ul>
+          </section>
+
+          <section class="card" id="backupRestoreCard" data-collapsible="true" data-collapse-key="tool-backup" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Backup & Restore</h2>
+              <span class="section-subtitle">Export your planner data or restore it from a saved file</span>
+            </div>
+
+            <div class="form-buttons">
+              <button id="exportDataBtn" type="button">Export Data</button>
+              <button id="importDataBtn" type="button" class="secondary-btn">Import Data</button>
+              <button id="resetAppBtn" type="button" class="secondary-btn">Reset All Data</button>
+            </div>
+
+            <input type="file" id="importFileInput" accept=".json" class="hidden" />
+          </section>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
