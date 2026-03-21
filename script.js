@@ -30,7 +30,9 @@ const el = {
 
   categoryTotalsElement: document.getElementById("categoryTotals"),
   categoryChartCanvas: document.getElementById("categoryChart"),
-  forecastCategoryTotalsElement: document.getElementById("forecastCategoryTotals"),
+  forecastCategoryTotalsElement: document.getElementById(
+    "forecastCategoryTotals",
+  ),
   forecastCategoryChartCanvas: document.getElementById("forecastCategoryChart"),
   balanceForecastChartCanvas: document.getElementById("balanceForecastChart"),
 
@@ -41,10 +43,18 @@ const el = {
 
   totalDueElement: document.getElementById("totalDue"),
   safeToSpendElement: document.getElementById("safeToSpend"),
-  dashboardCurrentBalanceElement: document.getElementById("dashboardCurrentBalance"),
-  projectedBeforePaycheckElement: document.getElementById("projectedBeforePaycheck"),
-  dashboardNextPayAmountElement: document.getElementById("dashboardNextPayAmount"),
-  projectedAfterPaycheckElement: document.getElementById("projectedAfterPaycheck"),
+  dashboardCurrentBalanceElement: document.getElementById(
+    "dashboardCurrentBalance",
+  ),
+  projectedBeforePaycheckElement: document.getElementById(
+    "projectedBeforePaycheck",
+  ),
+  dashboardNextPayAmountElement: document.getElementById(
+    "dashboardNextPayAmount",
+  ),
+  projectedAfterPaycheckElement: document.getElementById(
+    "projectedAfterPaycheck",
+  ),
   daysUntilPaydayElement: document.getElementById("daysUntilPayday"),
   dailySafeSpendElement: document.getElementById("dailySafeSpend"),
 
@@ -93,9 +103,13 @@ const el = {
   incomeScenarioInput: document.getElementById("incomeScenario"),
   incomeScenarioResults: document.getElementById("incomeScenarioResults"),
   applyIncomeScenarioBtn: document.getElementById("applyIncomeScenarioBtn"),
-  useIncomeScenarioForForecastInput: document.getElementById("useIncomeScenarioForForecast"),
+  useIncomeScenarioForForecastInput: document.getElementById(
+    "useIncomeScenarioForForecast",
+  ),
   forecastPaySourceMessage: document.getElementById("forecastPaySourceMessage"),
-  forecastPaySourceMessageForecast: document.getElementById("forecastPaySourceMessageForecast"),
+  forecastPaySourceMessageForecast: document.getElementById(
+    "forecastPaySourceMessageForecast",
+  ),
   useEstimatorAverageBtn: document.getElementById("useEstimatorAverageBtn"),
   useManualNextPayBtn: document.getElementById("useManualNextPayBtn"),
   copyScenarioToManualBtn: document.getElementById("copyScenarioToManualBtn"),
@@ -115,7 +129,9 @@ const el = {
   debtPlannerSummary: document.getElementById("debtPlannerSummary"),
   debtList: document.getElementById("debtList"),
 
-  emergencySavingsBalanceInput: document.getElementById("emergencySavingsBalance"),
+  emergencySavingsBalanceInput: document.getElementById(
+    "emergencySavingsBalance",
+  ),
   emergencyFloorInput: document.getElementById("emergencyFloor"),
   lifeEventNameInput: document.getElementById("lifeEventName"),
   lifeEventTypeInput: document.getElementById("lifeEventType"),
@@ -145,8 +161,13 @@ const el = {
   financialStatusSummary: document.getElementById("financialStatusSummary"),
   starterGuideCard: document.getElementById("starterGuideCard"),
   starterGuideSummary: document.getElementById("starterGuideSummary"),
-  paycheckAllocationSummary: document.getElementById("paycheckAllocationSummary"),
+  paycheckAllocationSummary: document.getElementById(
+    "paycheckAllocationSummary",
+  ),
 
+  paystubImageInput: document.getElementById("paystubImageInput"),
+  scanPaystubImageBtn: document.getElementById("scanPaystubImageBtn"),
+  paystubOcrStatus: document.getElementById("paystubOcrStatus"),
   paystubTextInput: document.getElementById("paystubText"),
   analyzePaystubBtn: document.getElementById("analyzePaystubBtn"),
   clearPaystubBtn: document.getElementById("clearPaystubBtn"),
@@ -172,6 +193,7 @@ const lifeEvents = [];
 const paystubHistory = [];
 
 let latestParsedPaystub = null;
+let isProgrammaticPaystubUpdate = false;
 
 let editIndex = null;
 let bucketEditIndex = null;
@@ -201,7 +223,6 @@ function formatCurrency(amount) {
   });
 }
 
-
 function parseDisplayNumber(text) {
   if (text === null || text === undefined) return null;
   const raw = String(text).trim();
@@ -209,7 +230,6 @@ function parseDisplayNumber(text) {
 
   const hasCurrency = raw.includes("$");
   const hasPercent = raw.includes("%");
-  const hoursMatch = raw.match(/-?\d+(?:\.\d+)?/);
   const numeric = Number(raw.replace(/[^\d.-]/g, ""));
 
   if (Number.isNaN(numeric)) return null;
@@ -217,14 +237,25 @@ function parseDisplayNumber(text) {
   return {
     value: numeric,
     decimals: /\.\d{1,2}/.test(raw) ? 2 : 0,
-    format: hasCurrency ? "currency" : hasPercent ? "percent" : raw.includes("hrs") ? "hours" : "number",
+    format: hasCurrency
+      ? "currency"
+      : hasPercent
+        ? "percent"
+        : raw.includes("hrs")
+          ? "hours"
+          : "number",
     suffix: raw.includes("hrs") ? " hrs" : "",
     prefix: raw.startsWith("$") || hasCurrency ? "$" : "",
   };
 }
 
 function formatAnimatedValue(value, meta) {
-  const safeMeta = meta || { format: "number", decimals: 0, suffix: "", prefix: "" };
+  const safeMeta = meta || {
+    format: "number",
+    decimals: 0,
+    suffix: "",
+    prefix: "",
+  };
   const safeValue = Number(value) || 0;
 
   if (safeMeta.format === "currency") {
@@ -236,7 +267,8 @@ function formatAnimatedValue(value, meta) {
   }
 
   if (safeMeta.format === "hours") {
-    const decimals = safeMeta.decimals || (Math.abs(safeValue % 1) > 0.001 ? 2 : 0);
+    const decimals =
+      safeMeta.decimals || (Math.abs(safeValue % 1) > 0.001 ? 2 : 0);
     return `${safeValue.toFixed(decimals)}${safeMeta.suffix || " hrs"}`;
   }
 
@@ -252,8 +284,11 @@ function animateNumberText(node, nextText) {
     return;
   }
 
-  const previousMeta = parseDisplayNumber(node.dataset.animatedValue || node.textContent) || meta;
-  const startValue = Number(node.dataset.animatedNumeric || previousMeta.value || 0);
+  const previousMeta =
+    parseDisplayNumber(node.dataset.animatedValue || node.textContent) || meta;
+  const startValue = Number(
+    node.dataset.animatedNumeric || previousMeta.value || 0,
+  );
   const endValue = meta.value;
 
   if (Math.abs(endValue - startValue) < 0.005) {
@@ -304,7 +339,9 @@ function getMineSharePercent() {
 }
 
 function getPartnerSharePercent() {
-  const raw = el.householdPartnerShareInput ? el.householdPartnerShareInput.value : "0";
+  const raw = el.householdPartnerShareInput
+    ? el.householdPartnerShareInput.value
+    : "0";
   const parsed = raw === "" ? 0 : clamp(raw, 0, 100);
   return parsed;
 }
@@ -327,8 +364,12 @@ function syncHouseholdShareInputs(source) {
 function getSelectedSharedCategories() {
   if (!el.sharedCategoryInputs) return [];
   return Array.from(el.sharedCategoryInputs)
-    .filter(function (input) { return input.checked; })
-    .map(function (input) { return (input.dataset.category || "other").toLowerCase().trim(); });
+    .filter(function (input) {
+      return input.checked;
+    })
+    .map(function (input) {
+      return (input.dataset.category || "other").toLowerCase().trim();
+    });
 }
 
 function isHouseholdSplitActive() {
@@ -360,7 +401,6 @@ function getMonthlyEquivalentAmount(amount, frequency) {
   if (normalized === "yearly") return round2(value / 12);
   return round2(value);
 }
-
 
 function getEmergencySavingsBalance() {
   return safeNumber(el.emergencySavingsBalanceInput?.value);
@@ -429,11 +469,9 @@ function estimateDebtPayoff(balance, aprPercent, monthlyPayment) {
 }
 
 function getLifeEventsSorted() {
-  return lifeEvents
-    .slice()
-    .sort(function (a, b) {
-      return (a.date || "").localeCompare(b.date || "");
-    });
+  return lifeEvents.slice().sort(function (a, b) {
+    return (a.date || "").localeCompare(b.date || "");
+  });
 }
 
 function getLifeEventsUntilDate(endDate) {
@@ -456,7 +494,6 @@ function getLifeEventSignedTotal(events, fundingSource) {
 
   return total;
 }
-
 
 function getCheckingLifeEventItemsBeforeDate(endDate) {
   if (!endDate) return [];
@@ -490,7 +527,10 @@ function getCheckingLifeEventForecastEvents(forecastEndDate) {
       const parsedDate = parseLocalDate(event.date);
       return parsedDate
         ? {
-            type: event.type === "income" ? "life-event-income" : "life-event-expense",
+            type:
+              event.type === "income"
+                ? "life-event-income"
+                : "life-event-expense",
             date: parsedDate,
             label: event.name,
             amount: -getLifeEventSignedAmount(event),
@@ -532,7 +572,9 @@ function getBillReminderText(bill) {
 }
 
 function getAutopayBillCount() {
-  return bills.filter(function (bill) { return Boolean(bill.autopay); }).length;
+  return bills.filter(function (bill) {
+    return Boolean(bill.autopay);
+  }).length;
 }
 
 function getMonthlyRecurringBillsAmount() {
@@ -540,7 +582,7 @@ function getMonthlyRecurringBillsAmount() {
     bills.reduce(function (sum, bill) {
       if (bill.frequency === "one-time") return sum;
       return sum + getMonthlyEquivalentAmount(bill.amount, bill.frequency);
-    }, 0)
+    }, 0),
   );
 }
 
@@ -574,7 +616,11 @@ function getBillSecondaryText(bill) {
 }
 
 function parseLocalDate(dateString) {
-  if (!dateString || typeof dateString !== "string" || !dateString.includes("-")) {
+  if (
+    !dateString ||
+    typeof dateString !== "string" ||
+    !dateString.includes("-")
+  ) {
     return null;
   }
 
@@ -615,7 +661,11 @@ function getTodayLocal() {
 }
 
 function addDays(date, daysToAdd) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + daysToAdd);
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + daysToAdd,
+  );
 }
 
 function addMonthsSafe(date, monthsToAdd) {
@@ -627,7 +677,7 @@ function addMonthsSafe(date, monthsToAdd) {
   const lastDayOfTargetMonth = new Date(
     targetMonthDate.getFullYear(),
     targetMonthDate.getMonth() + 1,
-    0
+    0,
   ).getDate();
 
   const safeDay = Math.min(day, lastDayOfTargetMonth);
@@ -635,7 +685,7 @@ function addMonthsSafe(date, monthsToAdd) {
   return new Date(
     targetMonthDate.getFullYear(),
     targetMonthDate.getMonth(),
-    safeDay
+    safeDay,
   );
 }
 
@@ -651,7 +701,7 @@ function toDateInputString(date) {
   if (!date) return "";
 
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate()
+    date.getDate(),
   ).padStart(2, "0")}`;
 }
 
@@ -674,10 +724,52 @@ function getPriorityRank(priority) {
 }
 
 function safeNumber(value) {
-  const parsed = parseFloat(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
 
+  let text = String(value).trim();
+  if (!text) return 0;
+
+  text = text.replace(/[^\d.,-]/g, "");
+  if (!text) return 0;
+
+  const negative = text.includes("-");
+
+  if ((text.match(/\./g) || []).length > 1 && !text.includes(",")) {
+    const parts = text.split(".").filter(Boolean);
+    if (parts.length >= 2) {
+      const cents = parts.pop();
+      text = `${parts.join("")}.${cents}`;
+    }
+  }
+
+  if ((text.match(/,/g) || []).length > 1 && !text.includes(".")) {
+    const parts = text.split(",").filter(Boolean);
+    if (parts.length >= 2) {
+      const cents = parts.pop();
+      text = `${parts.join("")}.${cents}`;
+    }
+  }
+
+  if (text.includes(",") && text.includes(".")) {
+    if (text.lastIndexOf(".") > text.lastIndexOf(",")) {
+      text = text.replace(/,/g, "");
+    } else {
+      text = text.replace(/\./g, "").replace(",", ".");
+    }
+  } else if (text.includes(",")) {
+    const commaParts = text.split(",");
+    if (commaParts.length === 2 && commaParts[1].length <= 2) {
+      text = `${commaParts[0].replace(/,/g, "")}.${commaParts[1]}`;
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  }
+
+  text = text.replace(/(?!^)-/g, "");
+  const parsed = parseFloat(text);
+  return Number.isNaN(parsed) ? 0 : negative ? -Math.abs(parsed) : parsed;
+}
 
 function clampPercent(value, fallback) {
   if (value === "" || value === null || value === undefined) return fallback;
@@ -690,8 +782,10 @@ function roundQuarterHour(value) {
 
 function formatHours(value) {
   const rounded = Math.round(safeNumber(value) * 100) / 100;
-  if (Math.abs(rounded - Math.round(rounded)) < 0.01) return `${Math.round(rounded)}`;
-  if (Math.abs(rounded * 2 - Math.round(rounded * 2)) < 0.01) return `${rounded.toFixed(1)}`;
+  if (Math.abs(rounded - Math.round(rounded)) < 0.01)
+    return `${Math.round(rounded)}`;
+  if (Math.abs(rounded * 2 - Math.round(rounded * 2)) < 0.01)
+    return `${rounded.toFixed(1)}`;
   return `${rounded.toFixed(2)}`;
 }
 
@@ -699,7 +793,10 @@ function getWorkPlannerSettings() {
   return {
     hourlyRate: safeNumber(el.workHourlyRateInput?.value),
     baseHours: Math.max(0, safeNumber(el.workBaseHoursInput?.value || 40)),
-    otMultiplier: Math.max(1, safeNumber(el.workOtMultiplierInput?.value || 1.5)),
+    otMultiplier: Math.max(
+      1,
+      safeNumber(el.workOtMultiplierInput?.value || 1.5),
+    ),
     targetBuffer: Math.max(0, safeNumber(el.workTargetBufferInput?.value)),
     extraGoal: Math.max(0, safeNumber(el.workExtraGoalInput?.value)),
     manualNetRetentionPercent: clampPercent(el.workNetRetentionInput?.value, 0),
@@ -720,7 +817,11 @@ function getEstimatedNetRetentionRate(workSettings) {
 
   const baseNetPay = safeNumber(el.baseNetPayInput?.value);
   if (baseNetPay > 0 && settings.hourlyRate > 0 && settings.baseHours > 0) {
-    return clamp(baseNetPay / (settings.hourlyRate * settings.baseHours), 0.45, 0.95);
+    return clamp(
+      baseNetPay / (settings.hourlyRate * settings.baseHours),
+      0.45,
+      0.95,
+    );
   }
 
   return 0.72;
@@ -734,7 +835,8 @@ function estimateTakeHomeForHours(hours, workSettings) {
   const overtimeHours = Math.max(0, safeHours - settings.baseHours);
 
   const regularNet = regularHours * settings.hourlyRate * netRetention;
-  const overtimeNet = overtimeHours * settings.hourlyRate * settings.otMultiplier * netRetention;
+  const overtimeNet =
+    overtimeHours * settings.hourlyRate * settings.otMultiplier * netRetention;
 
   return round2(regularNet + overtimeNet);
 }
@@ -777,7 +879,7 @@ function getFuturePaychecks(startDate, frequency, count) {
   let currentDate = new Date(
     startDate.getFullYear(),
     startDate.getMonth(),
-    startDate.getDate()
+    startDate.getDate(),
   );
 
   for (let i = 0; i < count; i++) {
@@ -785,8 +887,8 @@ function getFuturePaychecks(startDate, frequency, count) {
       new Date(
         currentDate.getFullYear(),
         currentDate.getMonth(),
-        currentDate.getDate()
-      )
+        currentDate.getDate(),
+      ),
     );
 
     if (frequency === "weekly") {
@@ -807,7 +909,8 @@ function sortBillsForAllocation(billsToSort, mode) {
     const bDate = parseLocalDate(b.dueDate);
 
     if (mode === "survival") {
-      const priorityDiff = getPriorityRank(a.priority) - getPriorityRank(b.priority);
+      const priorityDiff =
+        getPriorityRank(a.priority) - getPriorityRank(b.priority);
       if (priorityDiff !== 0) return priorityDiff;
 
       if (!aDate && !bDate) return 0;
@@ -836,13 +939,21 @@ function getBucketOccurrencesUntil(endDate) {
 
   for (let i = 0; i < spendingBuckets.length; i++) {
     const bucket = spendingBuckets[i];
-    let currentDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    let currentDate = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
 
     while (currentDate <= endDate) {
       occurrences.push({
         name: bucket.name,
         rawAmount: safeNumber(bucket.amount),
-        amount: getAdjustedAmountForCategory(bucket.amount, bucket.category, "mine"),
+        amount: getAdjustedAmountForCategory(
+          bucket.amount,
+          bucket.category,
+          "mine",
+        ),
         dueDate: toDateInputString(currentDate),
         category: (bucket.category || "other").toLowerCase().trim(),
         frequency: bucket.frequency || "weekly",
@@ -885,7 +996,11 @@ function getBillsDueOnOrBefore(payDate) {
       items.push({
         ...bill,
         rawAmount: safeNumber(bill.amount),
-        amount: getAdjustedAmountForCategory(bill.amount, bill.category, "mine"),
+        amount: getAdjustedAmountForCategory(
+          bill.amount,
+          bill.category,
+          "mine",
+        ),
       });
     }
   }
@@ -898,16 +1013,18 @@ function getCombinedItemsBeforePayday(payDate) {
   const bucketItems = getBucketOccurrencesBeforeDate(payDate);
   const lifeEventItems = getCheckingLifeEventItemsBeforeDate(payDate);
 
-  return [...billItems, ...bucketItems, ...lifeEventItems].sort(function (a, b) {
-    const aDate = parseLocalDate(a.dueDate);
-    const bDate = parseLocalDate(b.dueDate);
+  return [...billItems, ...bucketItems, ...lifeEventItems].sort(
+    function (a, b) {
+      const aDate = parseLocalDate(a.dueDate);
+      const bDate = parseLocalDate(b.dueDate);
 
-    if (!aDate && !bDate) return 0;
-    if (!aDate) return 1;
-    if (!bDate) return -1;
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
 
-    return aDate - bDate;
-  });
+      return aDate - bDate;
+    },
+  );
 }
 
 function getTotalsByCategoryBeforeDate(payDate) {
@@ -936,15 +1053,24 @@ function getForecastBillEvents(bill, forecastEndDate) {
   const today = getTodayLocal();
 
   if (!billDate || !forecastEndDate) return events;
-  if ((!bill.frequency || bill.frequency === "one-time") && billDate < today) return events;
+  if ((!bill.frequency || bill.frequency === "one-time") && billDate < today)
+    return events;
 
   while (billDate <= forecastEndDate) {
     if (billDate >= today) {
       events.push({
         type: "bill",
-        date: new Date(billDate.getFullYear(), billDate.getMonth(), billDate.getDate()),
+        date: new Date(
+          billDate.getFullYear(),
+          billDate.getMonth(),
+          billDate.getDate(),
+        ),
         label: bill.name,
-        amount: -getAdjustedAmountForCategory(bill.amount, bill.category, "mine"),
+        amount: -getAdjustedAmountForCategory(
+          bill.amount,
+          bill.category,
+          "mine",
+        ),
       });
     }
 
@@ -958,7 +1084,7 @@ function getForecastBillEvents(bill, forecastEndDate) {
       billDate = new Date(
         billDate.getFullYear() + 1,
         billDate.getMonth(),
-        billDate.getDate()
+        billDate.getDate(),
       );
     } else {
       break;
@@ -983,7 +1109,11 @@ function getForecastBillOccurrences(forecastEndDate) {
       occurrences.push({
         name: bill.name,
         rawAmount: safeNumber(bill.amount),
-        amount: getAdjustedAmountForCategory(bill.amount, bill.category, "mine"),
+        amount: getAdjustedAmountForCategory(
+          bill.amount,
+          bill.category,
+          "mine",
+        ),
         dueDate: toDateInputString(eventDate),
         type: "bill",
         category: (bill.category || "other").toLowerCase().trim(),
@@ -1014,10 +1144,13 @@ function getForecastTotalsByCategory(forecastEndDate) {
   }
 
   const bucketOccurrences = getBucketOccurrencesUntil(forecastEndDate);
-  const lifeEventForecasts = getCheckingLifeEventForecastEvents(forecastEndDate);
+  const lifeEventForecasts =
+    getCheckingLifeEventForecastEvents(forecastEndDate);
 
   for (let i = 0; i < bucketOccurrences.length; i++) {
-    const category = (bucketOccurrences[i].category || "other").toLowerCase().trim();
+    const category = (bucketOccurrences[i].category || "other")
+      .toLowerCase()
+      .trim();
     if (!totals[category]) totals[category] = 0;
     totals[category] += bucketOccurrences[i].amount;
   }
@@ -1062,7 +1195,8 @@ function getIncomeScenarioAmount() {
 
 function getEffectiveNextPaycheckAmount() {
   const manualAmount = safeNumber(el.nextPayAmountInput?.value);
-  const useScenario = el.useIncomeScenarioForForecastInput?.value === "scenario";
+  const useScenario =
+    el.useIncomeScenarioForForecastInput?.value === "scenario";
   const scenarioResult = getIncomeScenarioAmount();
 
   if (useScenario && scenarioResult) {
@@ -1117,7 +1251,8 @@ function getForecastEndDate() {
 }
 
 function getForecastPaySourceDetails() {
-  const useScenario = el.useIncomeScenarioForForecastInput?.value === "scenario";
+  const useScenario =
+    el.useIncomeScenarioForForecastInput?.value === "scenario";
   const manualAmount = safeNumber(el.nextPayAmountInput?.value);
   const scenarioResult = getIncomeScenarioAmount();
 
@@ -1264,7 +1399,7 @@ function renderStressTestMessage() {
   if (stress.mode === "none") {
     setHtml(
       el.stressTestMessage,
-      `<div class="warning-box warning-box-good">No stress test is active. Your normal plan is being shown.</div>`
+      `<div class="warning-box warning-box-good">No stress test is active. Your normal plan is being shown.</div>`,
     );
     return;
   }
@@ -1273,8 +1408,8 @@ function renderStressTestMessage() {
     setHtml(
       el.stressTestMessage,
       `<div class="warning-box warning-box-warning">Simulating a lower paycheck by ${formatCurrency(
-        stress.amount
-      )}.</div>`
+        stress.amount,
+      )}.</div>`,
     );
     return;
   }
@@ -1284,7 +1419,7 @@ function renderStressTestMessage() {
       el.stressTestMessage,
       `<div class="warning-box warning-box-warning">Simulating your next paycheck arriving ${stress.days} day${
         stress.days === 1 ? "" : "s"
-      } late.</div>`
+      } late.</div>`,
     );
     return;
   }
@@ -1293,12 +1428,11 @@ function renderStressTestMessage() {
     setHtml(
       el.stressTestMessage,
       `<div class="warning-box warning-box-danger">Simulating an unexpected extra expense of ${formatCurrency(
-        stress.amount
-      )}.</div>`
+        stress.amount,
+      )}.</div>`,
     );
   }
 }
-
 
 function renderPaycheckEstimateResults() {
   if (!el.paycheckEstimateResults) return;
@@ -1309,7 +1443,7 @@ function renderPaycheckEstimateResults() {
   if (!estimate && !paystubEstimate) {
     setHtml(
       el.paycheckEstimateResults,
-      `<p class="timeline-empty">Enter at least one paycheck with both gross and net pay, or save a parsed paystub, to see estimated results.</p>`
+      `<p class="timeline-empty">Enter at least one paycheck with both gross and net pay, or save a parsed paystub, to see estimated results.</p>`,
     );
     return;
   }
@@ -1365,7 +1499,7 @@ function renderPaycheckEstimateResults() {
       ${cards.join("")}
     </div>
     ${paystubEstimate ? `<div class="planner-chip-row"><span class="planner-chip">Best forecast source: Paystub history</span><span class="planner-chip">Avg hourly net ${formatCurrency(paystubEstimate.averageHourlyNet)}</span></div>` : ""}
-  `
+  `,
   );
 }
 
@@ -1381,7 +1515,7 @@ function renderIncomeScenarioResults() {
   if (!result) {
     setHtml(
       el.incomeScenarioResults,
-      `<p class="timeline-empty">Enter a base net pay amount to see your income scenario result.</p>`
+      `<p class="timeline-empty">Enter a base net pay amount to see your income scenario result.</p>`,
     );
     return;
   }
@@ -1412,8 +1546,8 @@ function renderIncomeScenarioResults() {
       <div class="estimate-result-card">
         <span class="estimate-result-label">Scenario Paycheck Amount</span>
         <span class="estimate-result-value ${getBalanceStatus(result.scenarioAmount)}">${formatCurrency(
-      result.scenarioAmount
-    )}</span>
+          result.scenarioAmount,
+        )}</span>
       </div>
 
       <div class="estimate-result-card">
@@ -1421,7 +1555,7 @@ function renderIncomeScenarioResults() {
         <span class="estimate-result-value">${forecastSource}</span>
       </div>
     </div>
-  `
+  `,
   );
 }
 
@@ -1446,7 +1580,8 @@ function renderIncomePlanningPreview() {
   }
 
   const projectedBeforePaycheck = balance - totalDue;
-  const projectedAfterPaycheck = projectedBeforePaycheck + effectivePaycheckAmount;
+  const projectedAfterPaycheck =
+    projectedBeforePaycheck + effectivePaycheckAmount;
 
   setHtml(
     el.incomePlanningPreview,
@@ -1478,10 +1613,9 @@ function renderIncomePlanningPreview() {
         </span>
       </div>
     </div>
-  `
+  `,
   );
 }
-
 
 function renderWorkPlannerSummary() {
   if (!el.workPlannerSummary) return;
@@ -1495,7 +1629,7 @@ function renderWorkPlannerSummary() {
           <strong>Set up your weekly work target</strong>
           <span>Enter your hourly rate, base hours, and target buffer to estimate how many hours you need this week.</span>
         </div>
-      `
+      `,
     );
     return;
   }
@@ -1513,23 +1647,42 @@ function renderWorkPlannerSummary() {
   }
 
   const projectedBeforePaycheck = balance - totalDue;
-  const requiredPaycheck = Math.max(0, settings.targetBuffer + settings.extraGoal - projectedBeforePaycheck);
+  const requiredPaycheck = Math.max(
+    0,
+    settings.targetBuffer + settings.extraGoal - projectedBeforePaycheck,
+  );
   const minimumHours = estimateHoursForTakeHome(requiredPaycheck, settings);
   const forecastHours = estimateHoursForTakeHome(forecastPaycheck, settings);
-  const recommendedHours = minimumHours === null ? null : roundQuarterHour(Math.max(minimumHours + 2, settings.baseHours));
-  const recommendedTakeHome = recommendedHours === null ? 0 : estimateTakeHomeForHours(recommendedHours, settings);
+  const recommendedHours =
+    minimumHours === null
+      ? null
+      : roundQuarterHour(Math.max(minimumHours + 2, settings.baseHours));
+  const recommendedTakeHome =
+    recommendedHours === null
+      ? 0
+      : estimateTakeHomeForHours(recommendedHours, settings);
   const gapToClose = Math.max(0, requiredPaycheck - forecastPaycheck);
   const netRetention = getEstimatedNetRetentionRate(settings);
   const modelEstimate = getPreferredPaycheckEstimate();
-  const modelSource = getPaystubHistoryEstimate() ? "Paystub history" : (getAveragePaycheckEstimate() ? "Manual paycheck average" : "Fallback retention rate");
+  const modelSource = getPaystubHistoryEstimate()
+    ? "Paystub history"
+    : getAveragePaycheckEstimate()
+      ? "Manual paycheck average"
+      : "Fallback retention rate";
   const safeRangeStart = recommendedHours === null ? null : recommendedHours;
-  const safeRangeEnd = recommendedHours === null ? null : roundQuarterHour(recommendedHours + 5);
+  const safeRangeEnd =
+    recommendedHours === null ? null : roundQuarterHour(recommendedHours + 5);
 
-  const calloutClass = minimumHours === null || minimumHours > 70 ? 'planner-callout planner-callout-danger' : 'planner-callout';
-  let guidance = 'You are already covered for this stretch based on your current plan.';
+  const calloutClass =
+    minimumHours === null || minimumHours > 70
+      ? "planner-callout planner-callout-danger"
+      : "planner-callout";
+  let guidance =
+    "You are already covered for this stretch based on your current plan.";
 
   if (minimumHours === null) {
-    guidance = 'Add your hourly details and keep your paycheck estimate updated so the app can recommend a realistic work target.';
+    guidance =
+      "Add your hourly details and keep your paycheck estimate updated so the app can recommend a realistic work target.";
   } else if (gapToClose > 0) {
     guidance = `Your current forecast is short by ${formatCurrency(gapToClose)}. Hitting about ${formatHours(recommendedHours)} hours would give you a safer cushion.`;
   } else if (requiredPaycheck > 0) {
@@ -1550,15 +1703,15 @@ function renderWorkPlannerSummary() {
         </div>
         <div class="planner-summary-card">
           <span class="planner-summary-label">Minimum Hours Needed</span>
-          <span class="planner-summary-value">${minimumHours === null ? '—' : `${formatHours(minimumHours)} hrs`}</span>
+          <span class="planner-summary-value">${minimumHours === null ? "—" : `${formatHours(minimumHours)} hrs`}</span>
         </div>
         <div class="planner-summary-card">
           <span class="planner-summary-label">Recommended Target</span>
-          <span class="planner-summary-value">${recommendedHours === null ? '—' : `${formatHours(recommendedHours)} hrs`}</span>
+          <span class="planner-summary-value">${recommendedHours === null ? "—" : `${formatHours(recommendedHours)} hrs`}</span>
         </div>
         <div class="planner-summary-card">
           <span class="planner-summary-label">Safe Range</span>
-          <span class="planner-summary-value">${safeRangeStart === null ? '—' : `${formatHours(safeRangeStart)}–${formatHours(safeRangeEnd)} hrs`}</span>
+          <span class="planner-summary-value">${safeRangeStart === null ? "—" : `${formatHours(safeRangeStart)}–${formatHours(safeRangeEnd)} hrs`}</span>
         </div>
         <div class="planner-summary-card">
           <span class="planner-summary-label">Net Keep Estimate</span>
@@ -1567,13 +1720,13 @@ function renderWorkPlannerSummary() {
       </div>
       <div class="planner-callout work-planner-callout">
         <strong>Estimated take-home at recommended hours</strong>
-        <span>${recommendedHours === null ? 'Add your hourly details to calculate your target.' : `${formatCurrency(recommendedTakeHome)} based on ${formatHours(recommendedHours)} total hours.`}</span>
+        <span>${recommendedHours === null ? "Add your hourly details to calculate your target." : `${formatCurrency(recommendedTakeHome)} based on ${formatHours(recommendedHours)} total hours.`}</span>
       </div>
       <div class="${calloutClass}">
         <strong>Work target guidance</strong>
         <span>${guidance}</span>
       </div>
-    `
+    `,
   );
 }
 
@@ -1585,7 +1738,7 @@ function renderBuckets() {
   if (spendingBuckets.length === 0) {
     setHtml(
       el.bucketList,
-      `<li class="timeline-empty">No spending buckets added yet.</li>`
+      `<li class="timeline-empty">No spending buckets added yet.</li>`,
     );
     return;
   }
@@ -1628,7 +1781,8 @@ function renderBuckets() {
     editBtn.addEventListener("click", function () {
       el.bucketNameInput.value = bucket.name;
       el.bucketAmountInput.value = bucket.amount;
-      if (el.bucketCategoryInput) el.bucketCategoryInput.value = bucket.category || "other";
+      if (el.bucketCategoryInput)
+        el.bucketCategoryInput.value = bucket.category || "other";
       el.bucketFrequencyInput.value = bucket.frequency || "weekly";
 
       bucketEditIndex = i;
@@ -1717,7 +1871,7 @@ function renderBillsOverview() {
       <span class="overview-pill-label">Due Soon</span>
       <span class="overview-pill-value">${dueSoonCount}</span>
     </div>
-  `
+  `,
   );
 }
 
@@ -1751,7 +1905,8 @@ function renderBills() {
   const filteredBills = sortedBills.filter(function (bill) {
     const matchesSearch = bill.name.toLowerCase().includes(searchText);
     const billCategory = (bill.category || "other").toLowerCase().trim();
-    const matchesCategory = selectedCategory === "all" || billCategory === selectedCategory;
+    const matchesCategory =
+      selectedCategory === "all" || billCategory === selectedCategory;
 
     const billStatus = getBillStatus(bill, payDate, today);
 
@@ -1772,7 +1927,7 @@ function renderBills() {
   if (bills.length === 0) {
     setHtml(
       el.billList,
-      `<li class="timeline-empty">No bills added yet.<br><br>Add your first bill above to begin tracking your expenses.</li>`
+      `<li class="timeline-empty">No bills added yet.<br><br>Add your first bill above to begin tracking your expenses.</li>`,
     );
     return;
   }
@@ -1782,8 +1937,8 @@ function renderBills() {
       selectedStatus === "paid"
         ? "No paid bills found."
         : selectedStatus === "unpaid"
-        ? "No unpaid bills found."
-        : "No bills match your search or filters.";
+          ? "No unpaid bills found."
+          : "No bills match your search or filters.";
 
     setHtml(el.billList, `<li class="timeline-empty">${emptyMessage}</li>`);
     return;
@@ -1807,18 +1962,18 @@ function renderBills() {
     const statusLabel = bill.paid
       ? "Paid"
       : billStatus === "overdue"
-      ? "Overdue"
-      : billStatus === "due-soon"
-      ? "Due Soon"
-      : "Upcoming";
+        ? "Overdue"
+        : billStatus === "due-soon"
+          ? "Due Soon"
+          : "Upcoming";
 
     const statusChipClass = bill.paid
       ? "bill-chip-status-paid"
       : billStatus === "overdue"
-      ? "bill-chip-status-overdue"
-      : billStatus === "due-soon"
-      ? "bill-chip-status-warning"
-      : "bill-chip-status-neutral";
+        ? "bill-chip-status-overdue"
+        : billStatus === "due-soon"
+          ? "bill-chip-status-warning"
+          : "bill-chip-status-neutral";
 
     const billText = document.createElement("div");
     billText.className = "bill-main";
@@ -1877,12 +2032,18 @@ function renderBills() {
       el.billNameInput.value = bill.name;
       el.billAmountInput.value = bill.amount;
       el.billDueDateInput.value = bill.dueDate;
-      el.billCategoryInput.value = (bill.category || "other").toLowerCase().trim();
+      el.billCategoryInput.value = (bill.category || "other")
+        .toLowerCase()
+        .trim();
       el.billFrequencyInput.value = bill.frequency || "one-time";
       el.billPriorityInput.value = bill.priority || "important";
       if (el.billNotesInput) el.billNotesInput.value = bill.notes || "";
-      if (el.billAutopayInput) el.billAutopayInput.checked = Boolean(bill.autopay);
-      if (el.billReminderDaysInput) el.billReminderDaysInput.value = String(Math.max(0, safeNumber(bill.reminderDays)));
+      if (el.billAutopayInput)
+        el.billAutopayInput.checked = Boolean(bill.autopay);
+      if (el.billReminderDaysInput)
+        el.billReminderDaysInput.value = String(
+          Math.max(0, safeNumber(bill.reminderDays)),
+        );
 
       editIndex = realIndex;
       enterEditMode();
@@ -1957,7 +2118,7 @@ function renderUpcomingBills() {
   if (!nextPayDate) {
     setHtml(
       el.upcomingBillsList,
-      `<p class="timeline-empty">Enter a next paycheck date to see upcoming bills.</p>`
+      `<p class="timeline-empty">Enter a next paycheck date to see upcoming bills.</p>`,
     );
     return;
   }
@@ -1967,7 +2128,7 @@ function renderUpcomingBills() {
   if (!payDate) {
     setHtml(
       el.upcomingBillsList,
-      `<p class="timeline-empty">Enter a valid next paycheck date to see upcoming bills.</p>`
+      `<p class="timeline-empty">Enter a valid next paycheck date to see upcoming bills.</p>`,
     );
     return;
   }
@@ -1979,17 +2140,25 @@ function renderUpcomingBills() {
     return !bill.paid && billDate && billDate >= today && billDate <= payDate;
   });
 
-  const bucketOccurrences = getBucketOccurrencesBeforeDate(payDate).filter(function (bucket) {
-    const bucketDate = parseLocalDate(bucket.dueDate);
-    return bucketDate && bucketDate >= today && bucketDate <= payDate;
-  });
+  const bucketOccurrences = getBucketOccurrencesBeforeDate(payDate).filter(
+    function (bucket) {
+      const bucketDate = parseLocalDate(bucket.dueDate);
+      return bucketDate && bucketDate >= today && bucketDate <= payDate;
+    },
+  );
 
-  const checkingEvents = getCheckingLifeEventItemsBeforeDate(payDate).filter(function (event) {
-    const eventDate = parseLocalDate(event.dueDate);
-    return eventDate && eventDate >= today && eventDate <= payDate;
-  });
+  const checkingEvents = getCheckingLifeEventItemsBeforeDate(payDate).filter(
+    function (event) {
+      const eventDate = parseLocalDate(event.dueDate);
+      return eventDate && eventDate >= today && eventDate <= payDate;
+    },
+  );
 
-  const upcoming = [...upcomingBills, ...bucketOccurrences, ...checkingEvents].sort(function (a, b) {
+  const upcoming = [
+    ...upcomingBills,
+    ...bucketOccurrences,
+    ...checkingEvents,
+  ].sort(function (a, b) {
     const aDate = parseLocalDate(a.dueDate);
     const bDate = parseLocalDate(b.dueDate);
 
@@ -2000,13 +2169,16 @@ function renderUpcomingBills() {
     const dateDiff = aDate - bDate;
     if (dateDiff !== 0) return dateDiff;
 
-    return getPriorityRank(a.priority || "flexible") - getPriorityRank(b.priority || "flexible");
+    return (
+      getPriorityRank(a.priority || "flexible") -
+      getPriorityRank(b.priority || "flexible")
+    );
   });
 
   if (upcoming.length === 0) {
     setHtml(
       el.upcomingBillsList,
-      `<p class="timeline-empty">No bills or bucket spending are due before your next paycheck.</p>`
+      `<p class="timeline-empty">No bills or bucket spending are due before your next paycheck.</p>`,
     );
     return;
   }
@@ -2021,17 +2193,19 @@ function renderUpcomingBills() {
       bill.type === "bucket"
         ? "due-soon"
         : bill.type === "life-event"
-        ? (bill.amount < 0 ? "income" : "due-soon")
-        : getBillStatus(bill, payDate, today);
+          ? bill.amount < 0
+            ? "income"
+            : "due-soon"
+          : getBillStatus(bill, payDate, today);
 
     const upcomingBadge =
       upcomingStatus === "overdue"
         ? `<span class="event-badge event-badge-overdue">Overdue</span>`
         : upcomingStatus === "income"
-        ? `<span class="event-badge event-badge-income">Boost</span>`
-        : upcomingStatus === "due-soon"
-        ? `<span class="event-badge event-badge-warning">Due Soon</span>`
-        : `<span class="event-badge event-badge-expense">Upcoming</span>`;
+          ? `<span class="event-badge event-badge-income">Boost</span>`
+          : upcomingStatus === "due-soon"
+            ? `<span class="event-badge event-badge-warning">Due Soon</span>`
+            : `<span class="event-badge event-badge-expense">Upcoming</span>`;
 
     row.innerHTML = `
       <div class="timeline-left">
@@ -2041,8 +2215,8 @@ function renderUpcomingBills() {
         </div>
         <div class="timeline-date">
           ${bill.type === "bucket" ? "Spending Bucket" : bill.type === "life-event" ? "Life Event" : formatCategory(bill.category)} • Due ${formatDate(
-      bill.dueDate
-    )}
+            bill.dueDate,
+          )}
         </div>
       </div>
       <div class="timeline-right">
@@ -2088,26 +2262,28 @@ function renderCashFlowWarning() {
   }
 
   const projectedBeforePaycheck = balance - totalDue;
-  const titleNode = el.cashFlowWarningCard.querySelector(".cash-flow-warning-title");
+  const titleNode = el.cashFlowWarningCard.querySelector(
+    ".cash-flow-warning-title",
+  );
   el.cashFlowWarningCard.classList.remove("hidden");
 
   if (projectedBeforePaycheck < 0) {
     if (titleNode) titleNode.textContent = "Risk before payday";
     setHtml(
       el.cashFlowWarningMessage,
-      `<div class="warning-box warning-box-danger">Your balance may go negative before the next paycheck. Review upcoming bills and cut back flexible spending.</div>`
+      `<div class="warning-box warning-box-danger">Your balance may go negative before the next paycheck. Review upcoming bills and cut back flexible spending.</div>`,
     );
   } else if (projectedBeforePaycheck < 100) {
     if (titleNode) titleNode.textContent = "Tight before payday";
     setHtml(
       el.cashFlowWarningMessage,
-      `<div class="warning-box warning-box-warning">Your margin before payday is getting thin. Keep extra spending light until the next check lands.</div>`
+      `<div class="warning-box warning-box-warning">Your margin before payday is getting thin. Keep extra spending light until the next check lands.</div>`,
     );
   } else {
     if (titleNode) titleNode.textContent = "Status before payday";
     setHtml(
       el.cashFlowWarningMessage,
-      `<div class="warning-box warning-box-good">Your balance before the next paycheck looks stable right now.</div>`
+      `<div class="warning-box warning-box-good">Your balance before the next paycheck looks stable right now.</div>`,
     );
   }
 }
@@ -2129,7 +2305,7 @@ function renderTimeline() {
   if (!nextPayDate) {
     setHtml(
       el.timelineList,
-      `<p class="timeline-empty">Enter a next paycheck date to see your timeline.</p>`
+      `<p class="timeline-empty">Enter a next paycheck date to see your timeline.</p>`,
     );
     return;
   }
@@ -2139,17 +2315,21 @@ function renderTimeline() {
   if (!payDate) {
     setHtml(
       el.timelineList,
-      `<p class="timeline-empty">Enter a valid next paycheck date to see your timeline.</p>`
+      `<p class="timeline-empty">Enter a valid next paycheck date to see your timeline.</p>`,
     );
     return;
   }
 
   const timelineItems = getCombinedItemsBeforePayday(payDate);
 
-  if (bills.length === 0 && spendingBuckets.length === 0 && lifeEvents.length === 0) {
+  if (
+    bills.length === 0 &&
+    spendingBuckets.length === 0 &&
+    lifeEvents.length === 0
+  ) {
     setHtml(
       el.timelineList,
-      `<p class="timeline-empty">Add bills or spending buckets to see how your balance will change before your next paycheck.</p>`
+      `<p class="timeline-empty">Add bills or spending buckets to see how your balance will change before your next paycheck.</p>`,
     );
     return;
   }
@@ -2157,7 +2337,7 @@ function renderTimeline() {
   if (timelineItems.length === 0) {
     setHtml(
       el.timelineList,
-      `<p class="timeline-empty">Good news — no bills or bucket spending are due before your next paycheck.</p>`
+      `<p class="timeline-empty">Good news — no bills or bucket spending are due before your next paycheck.</p>`,
     );
     return;
   }
@@ -2191,12 +2371,12 @@ function renderTimeline() {
       item.type === "bucket"
         ? `<span class="event-badge event-badge-warning">Bucket</span>`
         : item.type === "life-event"
-        ? item.amount < 0
-          ? `<span class="event-badge event-badge-income">Boost</span>`
-          : `<span class="event-badge event-badge-warning">Event</span>`
-        : parseLocalDate(item.dueDate) < getTodayLocal()
-        ? `<span class="event-badge event-badge-overdue">Overdue</span>`
-        : `<span class="event-badge event-badge-expense">Upcoming</span>`;
+          ? item.amount < 0
+            ? `<span class="event-badge event-badge-income">Boost</span>`
+            : `<span class="event-badge event-badge-warning">Event</span>`
+          : parseLocalDate(item.dueDate) < getTodayLocal()
+            ? `<span class="event-badge event-badge-overdue">Overdue</span>`
+            : `<span class="event-badge event-badge-expense">Upcoming</span>`;
 
     timelineItem.innerHTML = `
       <div class="timeline-left">
@@ -2211,8 +2391,8 @@ function renderTimeline() {
       <div class="timeline-right">
         <div class="timeline-amount ${item.amount < 0 ? "status-positive" : ""}">${item.amount < 0 ? "+" : "-"}${formatCurrency(Math.abs(item.amount))}</div>
         <div class="timeline-balance ${getBalanceStatus(runningBalance)}">Balance: ${formatCurrency(
-      runningBalance
-    )}</div>
+          runningBalance,
+        )}</div>
       </div>
     `;
 
@@ -2267,7 +2447,8 @@ function getForecastEvents() {
   }
 
   const bucketOccurrences = getBucketOccurrencesUntil(forecastEndDate);
-  const lifeEventForecasts = getCheckingLifeEventForecastEvents(forecastEndDate);
+  const lifeEventForecasts =
+    getCheckingLifeEventForecastEvents(forecastEndDate);
 
   for (let i = 0; i < bucketOccurrences.length; i++) {
     const bucketDate = parseLocalDate(bucketOccurrences[i].dueDate);
@@ -2315,7 +2496,7 @@ function renderForecastTimeline() {
   if (events.length === 0) {
     setHtml(
       el.forecastTimeline,
-      `<p class="timeline-empty">Enter a next paycheck date, paycheck amount, and pay frequency to see your forecast.</p>`
+      `<p class="timeline-empty">Enter a next paycheck date, paycheck amount, and pay frequency to see your forecast.</p>`,
     );
     return;
   }
@@ -2337,7 +2518,11 @@ function renderForecastTimeline() {
     let amountText = "";
     if (event.type === "paycheck" || event.type === "life-event-income") {
       amountText = `+${formatCurrency(Math.abs(event.amount))}`;
-    } else if (event.type === "bill" || event.type === "bucket" || event.type === "life-event-expense") {
+    } else if (
+      event.type === "bill" ||
+      event.type === "bucket" ||
+      event.type === "life-event-expense"
+    ) {
       amountText = `-${formatCurrency(Math.abs(event.amount))}`;
     } else {
       amountText = formatCurrency(event.amount);
@@ -2347,14 +2532,14 @@ function renderForecastTimeline() {
       event.type === "starting-balance"
         ? `<span class="event-badge event-badge-neutral">Start</span>`
         : event.type === "paycheck"
-        ? `<span class="event-badge event-badge-income">Paycheck</span>`
-        : event.type === "life-event-income"
-        ? `<span class="event-badge event-badge-income">Boost</span>`
-        : event.type === "bucket"
-        ? `<span class="event-badge event-badge-warning">Bucket</span>`
-        : event.type === "life-event-expense"
-        ? `<span class="event-badge event-badge-warning">Event</span>`
-        : `<span class="event-badge event-badge-expense">Bill</span>`;
+          ? `<span class="event-badge event-badge-income">Paycheck</span>`
+          : event.type === "life-event-income"
+            ? `<span class="event-badge event-badge-income">Boost</span>`
+            : event.type === "bucket"
+              ? `<span class="event-badge event-badge-warning">Bucket</span>`
+              : event.type === "life-event-expense"
+                ? `<span class="event-badge event-badge-warning">Event</span>`
+                : `<span class="event-badge event-badge-expense">Bill</span>`;
 
     row.innerHTML = `
       <div class="timeline-left">
@@ -2367,8 +2552,8 @@ function renderForecastTimeline() {
       <div class="timeline-right">
         <div class="timeline-amount">${amountText}</div>
         <div class="timeline-balance ${getBalanceStatus(runningBalance)}">Balance: ${formatCurrency(
-      runningBalance
-    )}</div>
+          runningBalance,
+        )}</div>
       </div>
     `;
 
@@ -2444,7 +2629,9 @@ function renderBalanceForecastChart() {
 function getAllocatedBillStatuses(billsForGroup, paycheckAmount) {
   let remaining = paycheckAmount;
   const results = [];
-  const allocationMode = el.allocationModeInput ? el.allocationModeInput.value : "normal";
+  const allocationMode = el.allocationModeInput
+    ? el.allocationModeInput.value
+    : "normal";
   const sortedBills = sortBillsForAllocation(billsForGroup, allocationMode);
 
   for (let i = 0; i < sortedBills.length; i++) {
@@ -2522,7 +2709,9 @@ function getPaycheckAllocationGroups() {
   if (!firstPayDate) return [];
 
   const futurePaychecks = getFuturePaychecks(firstPayDate, payFrequency, 4);
-  const allocationMode = el.allocationModeInput ? el.allocationModeInput.value : "normal";
+  const allocationMode = el.allocationModeInput
+    ? el.allocationModeInput.value
+    : "normal";
 
   const groups = futurePaychecks.map(function (date, index) {
     return {
@@ -2569,7 +2758,10 @@ function getPaycheckAllocationGroups() {
     }
 
     for (let i = 0; i < groups.length; i++) {
-      const allocation = getAllocatedBillStatuses(groups[i].bills, groups[i].startingBalance);
+      const allocation = getAllocatedBillStatuses(
+        groups[i].bills,
+        groups[i].startingBalance,
+      );
 
       groups[i].bills = allocation.bills;
       groups[i].remaining = allocation.remaining;
@@ -2586,15 +2778,17 @@ function getPaycheckAllocationGroups() {
     return groups;
   }
 
-  const survivalBills = sortBillsForAllocation(forecastBills, "survival").map(function (bill) {
-    return {
-      ...bill,
-      coveredAmount: 0,
-      uncoveredAmount: bill.amount,
-      status: "uncovered",
-      assignedGroupId: null,
-    };
-  });
+  const survivalBills = sortBillsForAllocation(forecastBills, "survival").map(
+    function (bill) {
+      return {
+        ...bill,
+        coveredAmount: 0,
+        uncoveredAmount: bill.amount,
+        status: "uncovered",
+        assignedGroupId: null,
+      };
+    },
+  );
 
   for (let i = 0; i < survivalBills.length; i++) {
     const bill = survivalBills[i];
@@ -2643,7 +2837,8 @@ function getPaycheckAllocationGroups() {
 
   for (let i = 0; i < groups.length; i++) {
     groups[i].bills.sort(function (a, b) {
-      const priorityDiff = getPriorityRank(a.priority) - getPriorityRank(b.priority);
+      const priorityDiff =
+        getPriorityRank(a.priority) - getPriorityRank(b.priority);
       if (priorityDiff !== 0) return priorityDiff;
 
       const aDate = parseLocalDate(a.dueDate);
@@ -2667,8 +2862,11 @@ function getPaycheckAllocationGroups() {
 function renderAllocationSummary(groups) {
   if (!el.paycheckAssignments) return;
 
-  const allocationMode = el.allocationModeInput ? el.allocationModeInput.value : "normal";
-  const modeLabel = allocationMode === "survival" ? "Survival Mode" : "Normal Mode";
+  const allocationMode = el.allocationModeInput
+    ? el.allocationModeInput.value
+    : "normal";
+  const modeLabel =
+    allocationMode === "survival" ? "Survival Mode" : "Normal Mode";
 
   const shortGroups = groups.filter(function (group) {
     return group.shortfall > 0;
@@ -2742,7 +2940,7 @@ function renderPaycheckAssignments() {
   if (groups.length === 0) {
     setHtml(
       el.paycheckAssignments,
-      `<p class="timeline-empty">Enter a next paycheck date, paycheck amount, and pay frequency to see paycheck assignments.</p>`
+      `<p class="timeline-empty">Enter a next paycheck date, paycheck amount, and pay frequency to see paycheck assignments.</p>`,
     );
     return;
   }
@@ -2780,7 +2978,7 @@ function renderPaycheckAssignments() {
         coverageText = `Reserved: ${formatCurrency(bill.coveredAmount)}`;
       } else if (bill.status === "partial") {
         coverageText = `Reserved: ${formatCurrency(bill.coveredAmount)} • Still needed: ${formatCurrency(
-          bill.uncoveredAmount
+          bill.uncoveredAmount,
         )}`;
       } else {
         coverageText = `Still needed: ${formatCurrency(bill.uncoveredAmount)}`;
@@ -2792,8 +2990,8 @@ function renderPaycheckAssignments() {
             <div class="timeline-title">${bill.name} ${statusBadge}</div>
             <div class="timeline-date">
               ${formatCategory(bill.category)} • ${getPriorityLabel(bill.priority)} • Due ${formatDate(
-        bill.dueDate
-      )}
+                bill.dueDate,
+              )}
             </div>
             <div class="timeline-date">${coverageText}</div>
           </div>
@@ -2821,7 +3019,10 @@ function renderPaycheckAssignments() {
     `;
 
     if (group.shortfall > 0) {
-      const shortfallPlan = getShortfallSuggestions(group.bills, group.shortfall);
+      const shortfallPlan = getShortfallSuggestions(
+        group.bills,
+        group.shortfall,
+      );
       let suggestionHtml = "";
 
       if (shortfallPlan.suggestions.length > 0) {
@@ -2851,7 +3052,7 @@ function renderPaycheckAssignments() {
             ${
               shortfallPlan.remainingShortfall > 0
                 ? `<p><strong>Still Short After Delays:</strong> <span class="status-danger">${formatCurrency(
-                    shortfallPlan.remainingShortfall
+                    shortfallPlan.remainingShortfall,
                   )}</span></p>`
                 : `<p><strong>Status After Delays:</strong> <span class="status-good">Shortfall could be covered</span></p>`
             }
@@ -2915,7 +3116,7 @@ function renderPaycheckAssignments() {
   if (!hasAssignments) {
     setHtml(
       el.paycheckAssignments,
-      `<p class="timeline-empty">No bills were assigned to the next forecasted paychecks.</p>`
+      `<p class="timeline-empty">No bills were assigned to the next forecasted paychecks.</p>`,
     );
   }
 }
@@ -2928,7 +3129,7 @@ function renderCategoryTotals() {
   if (!nextPayDate) {
     setHtml(
       el.categoryTotalsElement,
-      `<p class="timeline-empty">Enter a next paycheck date to see category totals.</p>`
+      `<p class="timeline-empty">Enter a next paycheck date to see category totals.</p>`,
     );
     return;
   }
@@ -2938,7 +3139,7 @@ function renderCategoryTotals() {
   if (!payDate) {
     setHtml(
       el.categoryTotalsElement,
-      `<p class="timeline-empty">Enter a valid next paycheck date to see category totals.</p>`
+      `<p class="timeline-empty">Enter a valid next paycheck date to see category totals.</p>`,
     );
     return;
   }
@@ -2946,7 +3147,7 @@ function renderCategoryTotals() {
   renderSimpleTotalsList(
     el.categoryTotalsElement,
     getTotalsByCategoryBeforeDate(payDate),
-    "No bills due before your next paycheck."
+    "No bills due before your next paycheck.",
   );
 }
 
@@ -2970,7 +3171,7 @@ function renderCategoryChart() {
   categoryChart = renderPieChart(
     el.categoryChartCanvas,
     categoryChart,
-    getTotalsByCategoryBeforeDate(payDate)
+    getTotalsByCategoryBeforeDate(payDate),
   );
 }
 
@@ -2982,7 +3183,7 @@ function renderForecastCategoryTotals() {
   if (!forecastEndDate) {
     setHtml(
       el.forecastCategoryTotalsElement,
-      `<p class="timeline-empty">Enter paycheck info to see forecast category totals.</p>`
+      `<p class="timeline-empty">Enter paycheck info to see forecast category totals.</p>`,
     );
     return;
   }
@@ -2990,7 +3191,7 @@ function renderForecastCategoryTotals() {
   renderSimpleTotalsList(
     el.forecastCategoryTotalsElement,
     getForecastTotalsByCategory(forecastEndDate),
-    "No bills found in the forecast window."
+    "No bills found in the forecast window.",
   );
 }
 
@@ -2998,7 +3199,8 @@ function renderForecastCategoryChart() {
   const forecastEndDate = getForecastEndDate();
 
   if (!forecastEndDate) {
-    if (el.forecastCategoryChartCanvas) el.forecastCategoryChartCanvas.style.display = "none";
+    if (el.forecastCategoryChartCanvas)
+      el.forecastCategoryChartCanvas.style.display = "none";
     forecastCategoryChart = destroyChart(forecastCategoryChart);
     return;
   }
@@ -3006,7 +3208,7 @@ function renderForecastCategoryChart() {
   forecastCategoryChart = renderPieChart(
     el.forecastCategoryChartCanvas,
     forecastCategoryChart,
-    getForecastTotalsByCategory(forecastEndDate)
+    getForecastTotalsByCategory(forecastEndDate),
   );
 }
 
@@ -3040,7 +3242,8 @@ function getCycleSnapshot() {
   const projectedAfterPaycheck = projectedBeforePaycheck + nextPayAmount;
   const safeToSpend = projectedBeforePaycheck;
   const daysUntilPayday = payDate ? getDaysBetween(today, payDate) : 0;
-  const dailySafeSpend = daysUntilPayday > 0 ? safeToSpend / daysUntilPayday : safeToSpend;
+  const dailySafeSpend =
+    daysUntilPayday > 0 ? safeToSpend / daysUntilPayday : safeToSpend;
 
   return {
     balance,
@@ -3060,7 +3263,9 @@ function getNextCycleDueAmount() {
   const snapshot = getCycleSnapshot();
   if (!snapshot.payDate) return 0;
 
-  const frequency = el.payFrequencyInput ? el.payFrequencyInput.value : "biweekly";
+  const frequency = el.payFrequencyInput
+    ? el.payFrequencyInput.value
+    : "biweekly";
   const future = getFuturePaychecks(snapshot.payDate, frequency, 2);
   const endDate = future.length > 1 ? future[1] : addDays(snapshot.payDate, 14);
   const startTime = snapshot.payDate.getTime();
@@ -3087,7 +3292,12 @@ function getNextCycleDueAmount() {
   const events = getLifeEventsUntilDate(endDate);
   for (let i = 0; i < events.length; i++) {
     const due = parseLocalDate(events[i].date);
-    if (due && due.getTime() > startTime && due.getTime() <= endTime && events[i].funding === "checking") {
+    if (
+      due &&
+      due.getTime() > startTime &&
+      due.getTime() <= endTime &&
+      events[i].funding === "checking"
+    ) {
       total += getLifeEventSignedAmount(events[i]);
     }
   }
@@ -3107,7 +3317,7 @@ function renderFinancialStatus() {
     setHtml(
       el.financialStatusSummary,
       `
-        <div class="financial-status-shell financial-status-shell-${status.tone}">
+        <div class="financial-status-shell">
           <div class="financial-status-main">
             <span class="financial-status-chip financial-status-chip-info">Setup needed</span>
             <h3 class="financial-status-title">Finish your paycheck setup to unlock decision guidance</h3>
@@ -3124,48 +3334,113 @@ function renderFinancialStatus() {
             </div>
           </div>
         </div>
-      `
+      `,
     );
     return;
   }
 
-  let status = { chip: "Stable", tone: "info", title: "You should make it through this cycle if spending stays controlled.", recommendation: "Protect your remaining room and keep flexible spending tight until the next paycheck clears." };
+  let status = {
+    chip: "Stable",
+    tone: "info",
+    title:
+      "You should make it through this cycle if spending stays controlled.",
+    recommendation:
+      "Protect your remaining room and keep flexible spending tight until the next paycheck clears.",
+  };
 
-  if (snapshot.projectedBeforePaycheck < 0 && snapshot.projectedAfterPaycheck < 0) {
-    status = { chip: "Risk Zone", tone: "danger", title: "You are projected to stay negative even after payday.", recommendation: "Cut flexible spending, test a lower-risk scenario, and use the Work Planner to close the gap quickly." };
-  } else if (snapshot.projectedBeforePaycheck < 0 && snapshot.projectedAfterPaycheck >= 0) {
-    status = { chip: "Recovery Mode", tone: "warn", title: "You are short before payday, but the next paycheck pulls the cycle back above zero.", recommendation: "Avoid extra spending before payday and keep the next check focused on recovery, not optional spending." };
-  } else if (snapshot.projectedAfterPaycheck >= 600 && snapshot.dailySafeSpend >= 35) {
-    status = { chip: "Comfortable", tone: "good", title: "This cycle has real breathing room after payday.", recommendation: "You have room to protect savings, hit debt, or keep a stronger cushion for the next cycle." };
+  if (
+    snapshot.projectedBeforePaycheck < 0 &&
+    snapshot.projectedAfterPaycheck < 0
+  ) {
+    status = {
+      chip: "Risk Zone",
+      tone: "danger",
+      title: "You are projected to stay negative even after payday.",
+      recommendation:
+        "Cut flexible spending, test a lower-risk scenario, and use the Work Planner to close the gap quickly.",
+    };
+  } else if (
+    snapshot.projectedBeforePaycheck < 0 &&
+    snapshot.projectedAfterPaycheck >= 0
+  ) {
+    status = {
+      chip: "Recovery Mode",
+      tone: "warn",
+      title:
+        "You are short before payday, but the next paycheck pulls the cycle back above zero.",
+      recommendation:
+        "Avoid extra spending before payday and keep the next check focused on recovery, not optional spending.",
+    };
+  } else if (
+    snapshot.projectedAfterPaycheck >= 600 &&
+    snapshot.dailySafeSpend >= 35
+  ) {
+    status = {
+      chip: "Comfortable",
+      tone: "good",
+      title: "This cycle has real breathing room after payday.",
+      recommendation:
+        "You have room to protect savings, hit debt, or keep a stronger cushion for the next cycle.",
+    };
   } else if (snapshot.projectedAfterPaycheck >= 150) {
-    status = { chip: "Stable", tone: "info", title: "Your bills look covered, but the cushion is still limited.", recommendation: "Stay disciplined with day-to-day spending so the cushion survives the rest of the cycle." };
+    status = {
+      chip: "Stable",
+      tone: "info",
+      title: "Your bills look covered, but the cushion is still limited.",
+      recommendation:
+        "Stay disciplined with day-to-day spending so the cushion survives the rest of the cycle.",
+    };
   } else {
-    status = { chip: "Tight", tone: "warn", title: "You are covering the cycle, but there is not much margin for surprises.", recommendation: "Treat this like a low-spend stretch and check the Payday Readiness Ladder before committing extra money." };
+    status = {
+      chip: "Tight",
+      tone: "warn",
+      title:
+        "You are covering the cycle, but there is not much margin for surprises.",
+      recommendation:
+        "Treat this like a low-spend stretch and check the Payday Readiness Ladder before committing extra money.",
+    };
   }
 
   if (snapshot.projectedBeforePaycheck < 0) {
-    watchItems.push(`Short before payday: ${formatCurrency(Math.abs(snapshot.projectedBeforePaycheck))}`);
+    watchItems.push(
+      `Short before payday: ${formatCurrency(Math.abs(snapshot.projectedBeforePaycheck))}`,
+    );
   }
 
-  if (snapshot.projectedAfterPaycheck >= 0 && snapshot.projectedAfterPaycheck < 250) {
-    watchItems.push(`After-paycheck cushion is only ${formatCurrency(snapshot.projectedAfterPaycheck)}`);
+  if (
+    snapshot.projectedAfterPaycheck >= 0 &&
+    snapshot.projectedAfterPaycheck < 250
+  ) {
+    watchItems.push(
+      `After-paycheck cushion is only ${formatCurrency(snapshot.projectedAfterPaycheck)}`,
+    );
   }
 
   if (snapshot.dailySafeSpend < 20 && snapshot.daysUntilPayday > 0) {
-    watchItems.push(`Daily safe spending is only ${formatCurrency(snapshot.dailySafeSpend)} for the next ${snapshot.daysUntilPayday} day${snapshot.daysUntilPayday === 1 ? "" : "s"}`);
+    watchItems.push(
+      `Daily safe spending is only ${formatCurrency(snapshot.dailySafeSpend)} for the next ${snapshot.daysUntilPayday} day${snapshot.daysUntilPayday === 1 ? "" : "s"}`,
+    );
   }
 
   if (nextCycleDue > 0) {
-    watchItems.push(`Next-cycle bills after payday: ${formatCurrency(nextCycleDue)}`);
+    watchItems.push(
+      `Next-cycle bills after payday: ${formatCurrency(nextCycleDue)}`,
+    );
   }
 
   if (emergencyFloor > 0) {
     const gap = Math.max(0, emergencyFloor - getEmergencySavingsBalance());
-    watchItems.push(gap > 0 ? `Emergency fund gap: ${formatCurrency(gap)}` : "Emergency fund floor is currently covered");
+    watchItems.push(
+      gap > 0
+        ? `Emergency fund gap: ${formatCurrency(gap)}`
+        : "Emergency fund floor is currently covered",
+    );
   }
 
   if (!watchItems.length) {
-    watchItems.push("Keep your paycheck and bills updated so this decision view stays accurate.");
+    watchItems.push(
+      "Keep your paycheck and bills updated so this decision view stays accurate.",
+    );
   }
 
   setHtml(
@@ -3201,12 +3476,16 @@ function renderFinancialStatus() {
           <div class="financial-status-watchlist">
             <h3>What to watch</h3>
             <ul>
-              ${watchItems.map(function (item) { return `<li>${item}</li>`; }).join("")}
+              ${watchItems
+                .map(function (item) {
+                  return `<li>${item}</li>`;
+                })
+                .join("")}
             </ul>
           </div>
         </div>
       </div>
-    `
+    `,
   );
 }
 
@@ -3216,22 +3495,28 @@ function renderStarterGuide() {
   const checklist = [
     {
       label: "Today Setup",
-      done: safeNumber(el.currentBalanceInput?.value) !== 0 || !!el.currentBalanceInput?.value,
-      copy: "Add your current balance so the app knows where this cycle starts."
+      done:
+        safeNumber(el.currentBalanceInput?.value) !== 0 ||
+        !!el.currentBalanceInput?.value,
+      copy: "Add your current balance so the app knows where this cycle starts.",
     },
     {
       label: "Next Paycheck",
-      done: Boolean(el.nextPayDateInput?.value) && safeNumber(el.nextPayAmountInput?.value) > 0,
-      copy: "Add the date and amount of your next paycheck so the cycle can be calculated."
+      done:
+        Boolean(el.nextPayDateInput?.value) &&
+        safeNumber(el.nextPayAmountInput?.value) > 0,
+      copy: "Add the date and amount of your next paycheck so the cycle can be calculated.",
     },
     {
       label: "Bills",
       done: bills.length > 0,
-      copy: "Add at least one bill so your short-term cash pressure is real."
-    }
+      copy: "Add at least one bill so your short-term cash pressure is real.",
+    },
   ];
 
-  const complete = checklist.filter(function (item) { return item.done; }).length;
+  const complete = checklist.filter(function (item) {
+    return item.done;
+  }).length;
   const percent = Math.round((complete / checklist.length) * 100);
 
   if (percent >= 100) {
@@ -3241,7 +3526,10 @@ function renderStarterGuide() {
 
   el.starterGuideCard.classList.remove("hidden");
 
-  const nextStep = checklist.find(function (item) { return !item.done; }) || checklist[0];
+  const nextStep =
+    checklist.find(function (item) {
+      return !item.done;
+    }) || checklist[0];
 
   setHtml(
     el.starterGuideSummary,
@@ -3264,8 +3552,9 @@ function renderStarterGuide() {
         </div>
 
         <div class="starter-checklist">
-          ${checklist.map(function (item) {
-            return `
+          ${checklist
+            .map(function (item) {
+              return `
               <div class="starter-check-item">
                 <div class="starter-guide-pill">${item.done ? "Done" : "Next"}</div>
                 <div>
@@ -3274,10 +3563,11 @@ function renderStarterGuide() {
                 </div>
               </div>
             `;
-          }).join("")}
+            })
+            .join("")}
         </div>
       </div>
-    `
+    `,
   );
 }
 
@@ -3293,15 +3583,22 @@ function renderPaycheckAllocationSummary() {
   if (!snapshot.nextPayDateString || snapshot.nextPayAmount <= 0) {
     setHtml(
       el.paycheckAllocationSummary,
-      '<p class="timeline-empty">Add your next paycheck date and amount to see a suggested payday allocation plan.</p>'
+      '<p class="timeline-empty">Add your next paycheck date and amount to see a suggested payday allocation plan.</p>',
     );
     return;
   }
 
-  const availableAfterPay = Math.max(0, round2(snapshot.projectedAfterPaycheck));
-  const emergencyGap = Math.max(0, round2(getEmergencyFloor() - getEmergencySavingsBalance()));
+  const availableAfterPay = Math.max(
+    0,
+    round2(snapshot.projectedAfterPaycheck),
+  );
+  const emergencyGap = Math.max(
+    0,
+    round2(getEmergencyFloor() - getEmergencySavingsBalance()),
+  );
   const debtTarget = getBestDebtTarget();
-  const baseBufferTarget = nextCycleDue > 0 ? clamp(round2(nextCycleDue * 0.15), 100, 400) : 150;
+  const baseBufferTarget =
+    nextCycleDue > 0 ? clamp(round2(nextCycleDue * 0.15), 100, 400) : 150;
 
   let remaining = availableAfterPay;
   const plan = {
@@ -3320,37 +3617,65 @@ function renderPaycheckAllocationSummary() {
   }
 
   if (remaining > 0 && emergencyGap > 0) {
-    plan.emergencySavings = round2(Math.min(remaining, Math.min(emergencyGap, 250)));
+    plan.emergencySavings = round2(
+      Math.min(remaining, Math.min(emergencyGap, 250)),
+    );
     remaining = Math.max(0, round2(remaining - plan.emergencySavings));
   }
 
   if (remaining > 0 && debtTarget) {
-    plan.debtAcceleration = round2(Math.min(remaining, Math.min(safeNumber(debtTarget.balance), Math.max(50, remaining * 0.5))));
+    plan.debtAcceleration = round2(
+      Math.min(
+        remaining,
+        Math.min(safeNumber(debtTarget.balance), Math.max(50, remaining * 0.5)),
+      ),
+    );
     remaining = Math.max(0, round2(remaining - plan.debtAcceleration));
   }
 
   plan.safeSpending = round2(remaining);
 
   const recoveryGap = Math.max(shortBefore, shortAfter);
-  const recoveryHours = recoveryGap > 0 ? estimateHoursForTakeHome(recoveryGap, workSettings) : 0;
-  const paychecksToRecover = shortAfter > 0 && snapshot.nextPayAmount > 0 ? Math.ceil(shortAfter / snapshot.nextPayAmount) : 0;
+  const recoveryHours =
+    recoveryGap > 0 ? estimateHoursForTakeHome(recoveryGap, workSettings) : 0;
+  const paychecksToRecover =
+    shortAfter > 0 && snapshot.nextPayAmount > 0
+      ? Math.ceil(shortAfter / snapshot.nextPayAmount)
+      : 0;
 
-  const statusChip = shortAfter > 0
-    ? '<span class="readiness-status-chip readiness-status-danger">Short on payday</span>'
-    : shortBefore > 0
-      ? '<span class="readiness-status-chip readiness-status-warn">Recovery focus</span>'
-      : '<span class="readiness-status-chip readiness-status-good">Ready to allocate</span>';
+  const statusChip =
+    shortAfter > 0
+      ? '<span class="readiness-status-chip readiness-status-danger">Short on payday</span>'
+      : shortBefore > 0
+        ? '<span class="readiness-status-chip readiness-status-warn">Recovery focus</span>'
+        : '<span class="readiness-status-chip readiness-status-good">Ready to allocate</span>';
 
   const notes = [];
   if (shortAfter > 0) {
-    notes.push(`You are still short ${formatCurrency(shortAfter)} after payday. Protective allocations are paused until the shortfall is covered.`);
+    notes.push(
+      `You are still short ${formatCurrency(shortAfter)} after payday. Protective allocations are paused until the shortfall is covered.`,
+    );
   } else if (shortBefore > 0) {
-    notes.push(`You are short ${formatCurrency(shortBefore)} before payday, so the next check should stay recovery-focused first.`);
+    notes.push(
+      `You are short ${formatCurrency(shortBefore)} before payday, so the next check should stay recovery-focused first.`,
+    );
   }
-  if (plan.nextCycleBills > 0) notes.push(`Set aside ${formatCurrency(plan.nextCycleBills)} for bills that land before the following paycheck.`);
-  if (plan.emergencySavings > 0) notes.push(`Move ${formatCurrency(plan.emergencySavings)} toward your emergency floor while there is room.`);
-  if (plan.debtAcceleration > 0 && debtTarget) notes.push(`Send ${formatCurrency(plan.debtAcceleration)} toward ${debtTarget.name} as your suggested extra debt hit.`);
-  if (!notes.length) notes.push("This paycheck is mostly survival-focused, so keep spending tight and protect cash first.");
+  if (plan.nextCycleBills > 0)
+    notes.push(
+      `Set aside ${formatCurrency(plan.nextCycleBills)} for bills that land before the following paycheck.`,
+    );
+  if (plan.emergencySavings > 0)
+    notes.push(
+      `Move ${formatCurrency(plan.emergencySavings)} toward your emergency floor while there is room.`,
+    );
+  if (plan.debtAcceleration > 0 && debtTarget)
+    notes.push(
+      `Send ${formatCurrency(plan.debtAcceleration)} toward ${debtTarget.name} as your suggested extra debt hit.`,
+    );
+  if (!notes.length)
+    notes.push(
+      "This paycheck is mostly survival-focused, so keep spending tight and protect cash first.",
+    );
 
   setHtml(
     el.paycheckAllocationSummary,
@@ -3411,11 +3736,15 @@ function renderPaycheckAllocationSummary() {
       <div class="readiness-focus card-soft-panel">
         <h3>Payday plan notes</h3>
         <ul class="readiness-focus-list">
-          ${notes.map(function (item) { return `<li>${item}</li>`; }).join("")}
+          ${notes
+            .map(function (item) {
+              return `<li>${item}</li>`;
+            })
+            .join("")}
           ${paychecksToRecover > 0 ? `<li>Estimated paychecks to recover if nothing changes: ${paychecksToRecover}</li>` : ""}
         </ul>
       </div>
-    `
+    `,
   );
 }
 
@@ -3433,25 +3762,45 @@ function renderPaydayReadinessSummary() {
     { label: "Strong cushion", amount: 1000, tone: "info" },
   ];
 
-  const readinessStatus = afterPay >= 1000
-    ? { label: "Strong", tone: "good", copy: "You have real room after payday. Focus on debt, savings, or staying disciplined." }
-    : afterPay >= 500
-      ? { label: "Stable", tone: "good", copy: "This cycle looks manageable. Keep an eye on flexible spending so you protect the cushion." }
-      : afterPay >= 0
-        ? { label: "Tight", tone: "warn", copy: "You are covering the cycle, but there is not much room for surprises." }
-        : { label: "Behind", tone: "danger", copy: "This cycle is projected negative after payday. A cut, delay, or extra expense could hit hard." };
+  const readinessStatus =
+    afterPay >= 1000
+      ? {
+          label: "Strong",
+          tone: "good",
+          copy: "You have real room after payday. Focus on debt, savings, or staying disciplined.",
+        }
+      : afterPay >= 500
+        ? {
+            label: "Stable",
+            tone: "good",
+            copy: "This cycle looks manageable. Keep an eye on flexible spending so you protect the cushion.",
+          }
+        : afterPay >= 0
+          ? {
+              label: "Tight",
+              tone: "warn",
+              copy: "You are covering the cycle, but there is not much room for surprises.",
+            }
+          : {
+              label: "Behind",
+              tone: "danger",
+              copy: "This cycle is projected negative after payday. A cut, delay, or extra expense could hit hard.",
+            };
 
-  const targetCards = targetLevels.map(function (target) {
-    const gap = Math.max(0, round2(target.amount - afterPay));
-    const hoursNeeded = gap > 0 ? estimateHoursForTakeHome(gap, workSettings) : 0;
-    const hoursText = gap <= 0
-      ? "Already covered"
-      : hoursNeeded === null
-        ? "Add pay info"
-        : `${formatHours(hoursNeeded)} hrs`;
-    const gapText = gap <= 0 ? "Ready" : formatCurrency(gap);
+  const targetCards = targetLevels
+    .map(function (target) {
+      const gap = Math.max(0, round2(target.amount - afterPay));
+      const hoursNeeded =
+        gap > 0 ? estimateHoursForTakeHome(gap, workSettings) : 0;
+      const hoursText =
+        gap <= 0
+          ? "Already covered"
+          : hoursNeeded === null
+            ? "Add pay info"
+            : `${formatHours(hoursNeeded)} hrs`;
+      const gapText = gap <= 0 ? "Ready" : formatCurrency(gap);
 
-    return `
+      return `
       <article class="readiness-tier readiness-tier-${target.tone}">
         <div class="readiness-tier-top">
           <span class="readiness-tier-label">${target.label}</span>
@@ -3467,32 +3816,48 @@ function renderPaydayReadinessSummary() {
         </div>
       </article>
     `;
-  }).join("");
+    })
+    .join("");
 
   const focusItems = [];
 
   if (!snapshot.nextPayDateString) {
-    focusItems.push("Add your next paycheck date so the readiness ladder can calculate the cycle.");
+    focusItems.push(
+      "Add your next paycheck date so the readiness ladder can calculate the cycle.",
+    );
   }
 
   if (snapshot.projectedBeforePaycheck < 0) {
-    focusItems.push(`You are short ${formatCurrency(Math.abs(snapshot.projectedBeforePaycheck))} before payday. Reduce flexible spending or move a due date if possible.`);
+    focusItems.push(
+      `You are short ${formatCurrency(Math.abs(snapshot.projectedBeforePaycheck))} before payday. Reduce flexible spending or move a due date if possible.`,
+    );
   }
 
   if (snapshot.daysUntilPayday > 0 && snapshot.dailySafeSpend < 25) {
-    focusItems.push(`Daily safe spend is only ${formatCurrency(snapshot.dailySafeSpend)}. This cycle needs a tight day-by-day plan.`);
+    focusItems.push(
+      `Daily safe spend is only ${formatCurrency(snapshot.dailySafeSpend)}. This cycle needs a tight day-by-day plan.`,
+    );
   }
 
-  if (snapshot.projectedAfterPaycheck >= 0 && snapshot.projectedAfterPaycheck < 250) {
-    focusItems.push("You will make it through the cycle, but one surprise expense could erase the cushion.");
+  if (
+    snapshot.projectedAfterPaycheck >= 0 &&
+    snapshot.projectedAfterPaycheck < 250
+  ) {
+    focusItems.push(
+      "You will make it through the cycle, but one surprise expense could erase the cushion.",
+    );
   }
 
   if (snapshot.projectedAfterPaycheck >= 500) {
-    focusItems.push("You have enough room to think about a debt hit, emergency savings, or protecting next cycle's buffer.");
+    focusItems.push(
+      "You have enough room to think about a debt hit, emergency savings, or protecting next cycle's buffer.",
+    );
   }
 
   if (focusItems.length === 0) {
-    focusItems.push("Update Today Setup, Work Planner, and Scenario Test whenever your week changes so this ladder stays accurate.");
+    focusItems.push(
+      "Update Today Setup, Work Planner, and Scenario Test whenever your week changes so this ladder stays accurate.",
+    );
   }
 
   el.paydayReadinessSummary.innerHTML = `
@@ -3512,7 +3877,11 @@ function renderPaydayReadinessSummary() {
     <div class="readiness-focus card-soft-panel">
       <h3>What to watch next</h3>
       <ul class="readiness-focus-list">
-        ${focusItems.map(function (item) { return `<li>${item}</li>`; }).join("")}
+        ${focusItems
+          .map(function (item) {
+            return `<li>${item}</li>`;
+          })
+          .join("")}
       </ul>
     </div>
   `;
@@ -3523,36 +3892,63 @@ function calculateSummary() {
 
   setAnimatedText(el.totalDueElement, formatCurrency(snapshot.totalDue));
   setAnimatedText(el.safeToSpendElement, formatCurrency(snapshot.safeToSpend));
-  setAnimatedText(el.dashboardCurrentBalanceElement, formatCurrency(snapshot.balance));
-  setAnimatedText(el.projectedBeforePaycheckElement, formatCurrency(snapshot.projectedBeforePaycheck));
-  setAnimatedText(el.dashboardNextPayAmountElement, formatCurrency(snapshot.nextPayAmount));
-  setAnimatedText(el.projectedAfterPaycheckElement, formatCurrency(snapshot.projectedAfterPaycheck));
+  setAnimatedText(
+    el.dashboardCurrentBalanceElement,
+    formatCurrency(snapshot.balance),
+  );
+  setAnimatedText(
+    el.projectedBeforePaycheckElement,
+    formatCurrency(snapshot.projectedBeforePaycheck),
+  );
+  setAnimatedText(
+    el.dashboardNextPayAmountElement,
+    formatCurrency(snapshot.nextPayAmount),
+  );
+  setAnimatedText(
+    el.projectedAfterPaycheckElement,
+    formatCurrency(snapshot.projectedAfterPaycheck),
+  );
 
   const safeSpendBannerValue = document.getElementById("safeSpendBannerValue");
-  const safeSpendDailyBannerValue = document.getElementById("safeSpendDailyBannerValue");
+  const safeSpendDailyBannerValue = document.getElementById(
+    "safeSpendDailyBannerValue",
+  );
 
   if (safeSpendBannerValue) {
     safeSpendBannerValue.textContent = formatCurrency(snapshot.safeToSpend);
   }
 
   if (safeSpendDailyBannerValue) {
-    safeSpendDailyBannerValue.textContent = formatCurrency(snapshot.dailySafeSpend);
+    safeSpendDailyBannerValue.textContent = formatCurrency(
+      snapshot.dailySafeSpend,
+    );
   }
 
   if (el.daysUntilPaydayElement) {
-    setAnimatedText(el.daysUntilPaydayElement, String(snapshot.daysUntilPayday));
+    setAnimatedText(
+      el.daysUntilPaydayElement,
+      String(snapshot.daysUntilPayday),
+    );
   }
 
   if (el.dailySafeSpendElement) {
-    setAnimatedText(el.dailySafeSpendElement, formatCurrency(snapshot.dailySafeSpend));
-    el.dailySafeSpendElement.className = getBalanceStatus(snapshot.dailySafeSpend);
+    setAnimatedText(
+      el.dailySafeSpendElement,
+      formatCurrency(snapshot.dailySafeSpend),
+    );
+    el.dailySafeSpendElement.className = getBalanceStatus(
+      snapshot.dailySafeSpend,
+    );
   }
 
-  el.projectedBeforePaycheckElement.className = getBalanceStatus(snapshot.projectedBeforePaycheck);
-  el.projectedAfterPaycheckElement.className = getBalanceStatus(snapshot.projectedAfterPaycheck);
+  el.projectedBeforePaycheckElement.className = getBalanceStatus(
+    snapshot.projectedBeforePaycheck,
+  );
+  el.projectedAfterPaycheckElement.className = getBalanceStatus(
+    snapshot.projectedAfterPaycheck,
+  );
   el.safeToSpendElement.className = getBalanceStatus(snapshot.safeToSpend);
 }
-
 
 /* =========================
    ESTIMATOR / REFRESH
@@ -3596,7 +3992,8 @@ function getAveragePaycheckEstimate() {
   const averageGross = totalGross / validPaychecks.length;
   const averageNet = totalNet / validPaychecks.length;
   const averageOt = totalOt / validPaychecks.length;
-  const takeHomePercent = averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
+  const takeHomePercent =
+    averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
 
   return {
     count: validPaychecks.length,
@@ -3606,7 +4003,6 @@ function getAveragePaycheckEstimate() {
     takeHomePercent,
   };
 }
-
 
 function getAverageFromHistory(items, selector) {
   if (!items || !items.length) return 0;
@@ -3631,16 +4027,38 @@ function getPaystubHistoryEstimate() {
 
   if (!validEntries.length) return null;
 
-  const averageGross = getAverageFromHistory(validEntries, function (entry) { return entry.gross; });
-  const averageNet = getAverageFromHistory(validEntries, function (entry) { return entry.net; });
-  const averageRegularHours = getAverageFromHistory(validEntries, function (entry) { return entry.regularHours; });
-  const averageOvertimeHours = getAverageFromHistory(validEntries, function (entry) { return entry.overtimeHours; });
-  const averageTaxes = getAverageFromHistory(validEntries, function (entry) { return entry.taxTotal; });
-  const averageDeductions = getAverageFromHistory(validEntries, function (entry) { return entry.deductionTotal; });
+  const averageGross = getAverageFromHistory(validEntries, function (entry) {
+    return entry.gross;
+  });
+  const averageNet = getAverageFromHistory(validEntries, function (entry) {
+    return entry.net;
+  });
+  const averageRegularHours = getAverageFromHistory(
+    validEntries,
+    function (entry) {
+      return entry.regularHours;
+    },
+  );
+  const averageOvertimeHours = getAverageFromHistory(
+    validEntries,
+    function (entry) {
+      return entry.overtimeHours;
+    },
+  );
+  const averageTaxes = getAverageFromHistory(validEntries, function (entry) {
+    return entry.taxTotal;
+  });
+  const averageDeductions = getAverageFromHistory(
+    validEntries,
+    function (entry) {
+      return entry.deductionTotal;
+    },
+  );
   const averageHours = averageRegularHours + averageOvertimeHours;
   const averageHourlyNet = averageHours > 0 ? averageNet / averageHours : 0;
   const averageHourlyGross = averageHours > 0 ? averageGross / averageHours : 0;
-  const takeHomePercent = averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
+  const takeHomePercent =
+    averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
 
   return {
     count: validEntries.length,
@@ -3674,16 +4092,28 @@ function extractAmountByLabel(text, labels) {
   if (!text) return 0;
 
   for (let i = 0; i < labels.length; i++) {
-    const labelPattern = labels[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const labelPattern = labels[i]
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+
     const regexes = [
-      new RegExp(labelPattern + "\\s*[:#-]?\\s*\$?(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
-      new RegExp(labelPattern + "[^\\n]*?\$(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
+      new RegExp(
+        labelPattern +
+          "\\s*[:#=()\\-]*\\s*\\$?(-?[\\d][\\d.,]*\\d|-?[\\d])\\s*-?",
+        "i",
+      ),
+      new RegExp(
+        labelPattern +
+          "[^\\n\\r]{0,40}?\\$?(-?[\\d][\\d.,]*\\d|-?[\\d])\\s*-?",
+        "i",
+      ),
     ];
 
     for (let r = 0; r < regexes.length; r++) {
       const match = text.match(regexes[r]);
       if (match && match[1] !== undefined) {
-        return safeNumber(match[1].replace(/,/g, ""));
+        const value = Math.abs(safeNumber(match[1]));
+        if (value > 0) return value;
       }
     }
   }
@@ -3695,16 +4125,26 @@ function extractHoursByLabel(text, labels) {
   if (!text) return 0;
 
   for (let i = 0; i < labels.length; i++) {
-    const labelPattern = labels[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const labelPattern = labels[i]
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
     const regexes = [
-      new RegExp(labelPattern + "\\s*[:#-]?\\s*(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
-      new RegExp(labelPattern + "[^\\n]*?(-?\\d[\\d,]*\\.?\\d{0,2})\\s*(?:hrs|hours|hr)?", "i"),
+      new RegExp(
+        labelPattern + "\\s*[:#=()\\-]*\\s*(-?[\\d][\\d.,]*\\d|-?[\\d])",
+        "i",
+      ),
+      new RegExp(
+        labelPattern +
+          "[^\\n\\r]{0,30}?(-?[\\d][\\d.,]*\\d|-?[\\d])\\s*(?:hrs|hours|hr)?",
+        "i",
+      ),
     ];
 
     for (let r = 0; r < regexes.length; r++) {
       const match = text.match(regexes[r]);
       if (match && match[1] !== undefined) {
-        return safeNumber(match[1].replace(/,/g, ""));
+        const value = Math.abs(safeNumber(match[1]));
+        if (value > 0) return value;
       }
     }
   }
@@ -3714,74 +4154,329 @@ function extractHoursByLabel(text, labels) {
 
 function extractPaystubDate(text) {
   const normalized = normalizePaystubText(text);
-  const match = normalized.match(/(?:pay date|check date|date)\s*[:#-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/i);
-  if (!match) return "";
 
-  const raw = match[1];
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const numericMatch = normalized.match(
+    /(?:pay date|check date|date|dated)\s*[:#-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/i,
+  );
+  if (numericMatch) {
+    const raw = numericMatch[1];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
 
-  const parts = raw.split(/[\/\-]/).map(function (part) { return part.trim(); });
-  if (parts.length !== 3) return "";
+    const parts = raw.split(/[\/\-]/).map(function (part) {
+      return part.trim();
+    });
+    if (parts.length === 3) {
+      let month = safeNumber(parts[0]);
+      let day = safeNumber(parts[1]);
+      let year = safeNumber(parts[2]);
 
-  let month = safeNumber(parts[0]);
-  let day = safeNumber(parts[1]);
-  let year = safeNumber(parts[2]);
+      if (year < 100) year += 2000;
+      if (month && day && year) {
+        return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+    }
+  }
 
-  if (year < 100) year += 2000;
-  if (!month || !day || !year) return "";
+  const monthMatch = normalized.match(
+    /dated\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})[\/\-](\d{2,4})/i,
+  );
 
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  if (monthMatch) {
+    const monthMap = {
+      jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+      jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+    };
+
+    const month = monthMap[monthMatch[1].slice(0, 3).toLowerCase()];
+    const day = safeNumber(monthMatch[2]);
+    let year = safeNumber(monthMatch[3]);
+
+    if (year < 100) year += 2000;
+    if (month && day && year) {
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+
+  return "";
+}
+
+
+function setPaystubOcrStatus(message, tone) {
+  if (!el.paystubOcrStatus) return;
+  const safeTone = tone || "info";
+  el.paystubOcrStatus.className = `warning-box warning-box-${safeTone}`;
+  el.paystubOcrStatus.textContent = message;
+}
+
+async function scanPaystubImage() {
+  const file = el.paystubImageInput?.files?.[0];
+
+  if (!file) {
+    setPaystubOcrStatus("Choose a paystub image first, then tap Scan Image.", "warning");
+    return;
+  }
+
+  if (typeof Tesseract === "undefined") {
+    setPaystubOcrStatus("OCR library failed to load. Refresh once and try again.", "danger");
+    return;
+  }
+
+  if (el.scanPaystubImageBtn) el.scanPaystubImageBtn.disabled = true;
+  setPaystubOcrStatus("Scanning image... this can take a few seconds on phone.", "info");
+
+  try {
+    const result = await Tesseract.recognize(file, "eng", {
+      logger: function (message) {
+        if (!el.paystubOcrStatus) return;
+        if (message.status === "recognizing text" && typeof message.progress === "number") {
+          const percent = Math.round(message.progress * 100);
+          setPaystubOcrStatus(`Scanning image... ${percent}%`, "info");
+        }
+      },
+    });
+
+    const extractedText = normalizePaystubText(result?.data?.text || "");
+
+    if (!extractedText) {
+      setPaystubOcrStatus("No readable text was found. Try a clearer screenshot or cropped paystub image.", "warning");
+      return;
+    }
+
+    if (el.paystubTextInput) {
+      isProgrammaticPaystubUpdate = true;
+      el.paystubTextInput.value = extractedText;
+    }
+
+    latestParsedPaystub = parsePaystubText(extractedText);
+    renderPaystubAnalysis();
+    saveData();
+
+    isProgrammaticPaystubUpdate = false;
+
+    if (latestParsedPaystub) {
+      setPaystubOcrStatus("Image scanned successfully. Review the extracted values below, then save the parsed paystub if it looks right.", "good");
+    } else {
+      setPaystubOcrStatus("Text was extracted, but the parser could not confidently map the fields yet. Review the OCR text and tap Analyze Extracted Text if needed.", "warning");
+    }
+  } catch (error) {
+    console.error("Paystub OCR failed:", error);
+    setPaystubOcrStatus("OCR failed on this image. Try a flatter screenshot, better lighting, or a tighter crop around the paystub.", "danger");
+  } finally {
+    if (el.scanPaystubImageBtn) el.scanPaystubImageBtn.disabled = false;
+  }
+}
+
+
+function fixLikelyMissingDecimal(value, options) {
+  const amount = Math.abs(safeNumber(value));
+  const settings = options || {};
+  const maxReasonable = settings.maxReasonable || 200;
+  const minWholeToRepair = settings.minWholeToRepair || 100;
+
+  if (amount >= minWholeToRepair && amount > maxReasonable) {
+    const repaired = amount / 100;
+    if (repaired <= maxReasonable) return round2(repaired);
+  }
+
+  return round2(amount);
+}
+
+function getPaystubValidationWarnings(parsed) {
+  const warnings = [];
+  if (!parsed) return warnings;
+
+  if (parsed.gross > 0 && parsed.net > parsed.gross) {
+    warnings.push("Net pay is higher than gross pay, so one of those values may be wrong.");
+  }
+
+  if (parsed.taxTotal > parsed.gross * 0.5) {
+    warnings.push("Taxes look unusually high for this gross pay. One or more decimals may be missing.");
+  }
+
+  if (parsed.regularHours > 80) {
+    warnings.push("Regular hours look unusually high.");
+  }
+
+  if (parsed.overtimeHours > 40) {
+    warnings.push("Overtime hours look unusually high.");
+  }
+
+  const difference = round2(parsed.gross - parsed.net);
+
+  // If deductionTotal came from "Total Deductions", it already includes taxes.
+  const expected = parsed.deductionTotal > 0
+    ? round2(parsed.deductionTotal)
+    : round2(parsed.taxTotal);
+
+  if (parsed.gross > 0 && parsed.net > 0 && Math.abs(difference - expected) > 25) {
+    warnings.push("Gross minus net does not line up closely with total deductions.");
+  }
+
+  return warnings;
 }
 
 function parsePaystubText(text) {
   const normalized = normalizePaystubText(text);
   if (!normalized) return null;
 
-  const gross = extractAmountByLabel(normalized, [
-    "gross pay", "gross wages", "gross earnings", "gross amount", "total gross", "gross"
-  ]);
-  const net = extractAmountByLabel(normalized, [
-    "net pay", "net amount", "take home", "take-home", "direct deposit", "net"
-  ]);
-  const regularHours = extractHoursByLabel(normalized, [
-    "regular hours", "reg hours", "regular hrs", "hours worked", "worked hours"
-  ]);
-  const overtimeHours = extractHoursByLabel(normalized, [
-    "overtime hours", "ot hours", "ot hrs", "overtime hrs", "overtime"
+  function directAmount(pattern) {
+    const match = normalized.match(pattern);
+    return match ? Math.abs(safeNumber(match[1])) : 0;
+  }
+
+  function directHours(pattern) {
+    const match = normalized.match(pattern);
+    return match ? Math.abs(safeNumber(match[1])) : 0;
+  }
+
+  const gross =
+    directAmount(/gross eamings\s+([\d.,]+)/i) ||
+    directAmount(/gross earnings\s+([\d.,]+)/i) ||
+    directAmount(/(?:^|\n)gross [^\n\r]*?([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "gross earnings",
+      "gross pay",
+      "gross wages",
+      "gross amount",
+      "total gross",
+      "gross",
+    ]);
+
+  const net =
+    directAmount(/net pay\s*[:#=()\-]*\s*\$?\s*([\d.,]+)/i) ||
+    directAmount(/for the amount of\s+\$?\s*([\d.,]+)/i) ||
+    directAmount(/direct deposit[^\n\r]*?([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "net pay",
+      "net amount",
+      "take home",
+      "take-home",
+      "direct deposit",
+      "net",
+    ]);
+
+  const regularHours =
+    directHours(/hours regular time hours\s+([\d.,]+)/i) ||
+    directHours(/regular time hours\s+([\d.,]+)/i) ||
+    directHours(/(?:^|\n)\s*([\d.,]+)\s*r[\s-]?t\b/i) ||
+    extractHoursByLabel(normalized, [
+      "regular time hours",
+      "regular hours",
+      "reg hours",
+      "regular hrs",
+      "hours worked",
+      "worked hours",
+    ]);
+
+  const overtimeHours =
+    directHours(/time and one half hours\s+([\d.,]+)/i) ||
+    directHours(/(?:^|\n)\s*([\d.,]+)\s*t[\s-]?h\b/i) ||
+    extractHoursByLabel(normalized, [
+      "time and one half hours",
+      "overtime hours",
+      "ot hours",
+      "ot hrs",
+      "overtime hrs",
+      "overtime",
+    ]);
+
+  let federalTax =
+    directAmount(/fed tax\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "fed tax",
+      "federal tax",
+      "federal withholding",
+    ]);
+
+  let stateTax =
+    directAmount(/pa state tax\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "pa state tax",
+      "state tax",
+      "state withholding",
+    ]);
+
+  let localTax =
+    directAmount(/pa franconia twp\/montgomery\s+([\d.,]+)/i) ||
+    directAmount(/local w\/h tax\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "pa franconia twp/montgomery",
+      "local w/h tax",
+      "local tax",
+      "township tax",
+      "municipal tax",
+      "city tax",
+      "school tax",
+    ]);
+
+  let socialSecurity =
+    directAmount(/soc sec\s+([\d.,]+)/i) ||
+    directAmount(/fica\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "social security",
+      "soc sec",
+      "fica ss",
+      "fica",
+    ]);
+
+  let medicare =
+    directAmount(/medicare\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, ["medicare", "fica med"]);
+
+  let hsa =
+    directAmount(/hsa deduct\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, ["hsa deduct", "hsa", "health savings"]);
+
+  let retirement401k =
+    directAmount(/401k empee\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, [
+      "401k empee",
+      "401k employee",
+      "401k",
+      "401(k)",
+      "retirement",
+    ]);
+
+  const medical = extractAmountByLabel(normalized, [
+    "medical",
+    "health insurance",
+    "dental",
+    "vision",
   ]);
 
-  const federalTax = extractAmountByLabel(normalized, [
-    "federal tax", "fed tax", "federal withholding", "federal"
-  ]);
-  const stateTax = extractAmountByLabel(normalized, [
-    "state tax", "state withholding", "state"
-  ]);
-  const localTax = extractAmountByLabel(normalized, [
-    "local tax", "township tax", "municipal tax", "city tax", "school tax"
-  ]);
-  const socialSecurity = extractAmountByLabel(normalized, [
-    "social security", "soc sec", "fica ss"
-  ]);
-  const medicare = extractAmountByLabel(normalized, [
-    "medicare", "fica med"
-  ]);
-  const hsa = extractAmountByLabel(normalized, [
-    "hsa", "health savings"
-  ]);
-  const retirement401k = extractAmountByLabel(normalized, [
-    "401k", "401(k)", "retirement"
-  ]);
-  const medical = extractAmountByLabel(normalized, [
-    "medical", "health insurance", "dental", "vision"
-  ]);
+  let advance =
+    directAmount(/advance deduct\s+([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, ["advance deduct", "advance"]);
+
   const bonus = extractAmountByLabel(normalized, [
-    "bonus", "incentive", "commission"
+    "bonus",
+    "incentive",
+    "commission",
   ]);
+
+  federalTax = fixLikelyMissingDecimal(federalTax, { maxReasonable: 250 });
+  stateTax = fixLikelyMissingDecimal(stateTax, { maxReasonable: 150 });
+  localTax = fixLikelyMissingDecimal(localTax, { maxReasonable: 75 });
+  socialSecurity = fixLikelyMissingDecimal(socialSecurity, { maxReasonable: 200 });
+  medicare = fixLikelyMissingDecimal(medicare, { maxReasonable: 75 });
+  hsa = fixLikelyMissingDecimal(hsa, { maxReasonable: 500 });
+  retirement401k = fixLikelyMissingDecimal(retirement401k, { maxReasonable: 500 });
+  advance = fixLikelyMissingDecimal(advance, { maxReasonable: 1000 });
 
   const taxTotal = federalTax + stateTax + localTax + socialSecurity + medicare;
-  let deductionTotal = hsa + retirement401k + medical;
-  const fallbackDifference = gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
-  if (deductionTotal + taxTotal < fallbackDifference) {
+
+  const explicitTotalDeductions =
+    directAmount(/total deductions[^\n\r]*?([\d.,]+)/i) ||
+    extractAmountByLabel(normalized, ["total deductions"]);
+
+  let deductionTotal = explicitTotalDeductions > 0
+    ? fixLikelyMissingDecimal(explicitTotalDeductions, { maxReasonable: 5000, minWholeToRepair: 1000 })
+    : hsa + retirement401k + medical + advance;
+
+  const fallbackDifference =
+    gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
+
+  if (!deductionTotal && deductionTotal + taxTotal < fallbackDifference) {
     deductionTotal = Math.max(0, fallbackDifference - taxTotal);
   }
 
@@ -3792,7 +4487,7 @@ function parsePaystubText(text) {
 
   if (gross <= 0 && net <= 0) return null;
 
-  return {
+  const parsed = {
     id: `paystub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     sourceText: normalized,
     payDate: extractPaystubDate(normalized),
@@ -3810,13 +4505,18 @@ function parsePaystubText(text) {
     hsa: round2(hsa),
     retirement401k: round2(retirement401k),
     medical: round2(medical),
+    advance: round2(advance),
     taxTotal: round2(taxTotal),
     deductionTotal: round2(deductionTotal),
     takeHomePercent: round2(takeHomePercent),
     effectiveHourlyNet: round2(effectiveHourlyNet),
     effectiveHourlyGross: round2(effectiveHourlyGross),
+    validationWarnings: [],
     createdAt: new Date().toISOString(),
   };
+
+  parsed.validationWarnings = getPaystubValidationWarnings(parsed);
+  return parsed;
 }
 
 function renderPaystubAnalysis() {
@@ -3825,7 +4525,7 @@ function renderPaystubAnalysis() {
   if (!latestParsedPaystub) {
     setHtml(
       el.paystubAnalysisResults,
-      '<p class="timeline-empty">Paste paystub text here to extract gross pay, net pay, taxes, deductions, hours, and a take-home estimate.</p>'
+      '<p class="timeline-empty">Upload a paystub image or paste paystub text to extract gross pay, net pay, taxes, deductions, hours, and a take-home estimate.</p>',
     );
     if (el.addParsedPaystubBtn) el.addParsedPaystubBtn.disabled = true;
     return;
@@ -3862,25 +4562,34 @@ function renderPaystubAnalysis() {
           <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.deductionTotal)}</span>
         </div>
       </div>
+      ${
+        latestParsedPaystub.validationWarnings &&
+        latestParsedPaystub.validationWarnings.length
+          ? `<div class="warning-box warning-box-warning" style="margin-top:12px;"><strong>Double-check these fields</strong><ul style="margin:8px 0 0 18px;">${latestParsedPaystub.validationWarnings.map(function (item) { return `<li>${item}</li>`; }).join("")}</ul></div>`
+          : `<div class="warning-box warning-box-good" style="margin-top:12px;">No obvious parser red flags were found on this paystub.</div>`
+      }
       <div class="planner-chip-row">
         <span class="planner-chip">${latestParsedPaystub.payDate ? `Pay date ${formatDate(latestParsedPaystub.payDate)}` : "Pay date not detected"}</span>
         <span class="planner-chip">Effective hourly net ${formatCurrency(latestParsedPaystub.effectiveHourlyNet)}</span>
         <span class="planner-chip">Effective hourly gross ${formatCurrency(latestParsedPaystub.effectiveHourlyGross)}</span>
         ${latestParsedPaystub.bonus > 0 ? `<span class="planner-chip">Bonus ${formatCurrency(latestParsedPaystub.bonus)}</span>` : ""}
       </div>
-    `
+    `,
   );
 }
 
 function renderPaystubHistory() {
   if (el.paystubHistoryList) {
     if (!paystubHistory.length) {
-      el.paystubHistoryList.innerHTML = '<li class="timeline-empty">No paystubs saved yet. Add a parsed stub to build better paycheck and work-hour estimates.</li>';
+      el.paystubHistoryList.innerHTML =
+        '<li class="timeline-empty">No paystubs saved yet. Add a parsed stub to build better paycheck and work-hour estimates.</li>';
     } else {
       el.paystubHistoryList.innerHTML = paystubHistory
         .slice()
         .sort(function (a, b) {
-          return (b.payDate || b.createdAt || "").localeCompare(a.payDate || a.createdAt || "");
+          return (b.payDate || b.createdAt || "").localeCompare(
+            a.payDate || a.createdAt || "",
+          );
         })
         .map(function (entry, index) {
           return `
@@ -3917,7 +4626,7 @@ function renderPaystubHistory() {
   if (!estimate) {
     setHtml(
       el.paystubHistorySummary,
-      '<p class="timeline-empty">Save at least one paystub to build an average paycheck model from your real taxes, deductions, HSA, local taxes, and 401(k) drag.</p>'
+      '<p class="timeline-empty">Save at least one paystub to build an average paycheck model from your real taxes, deductions, HSA, local taxes, and 401(k) drag.</p>',
     );
     if (el.usePaystubAverageBtn) el.usePaystubAverageBtn.disabled = true;
     return;
@@ -3958,15 +4667,19 @@ function renderPaystubHistory() {
         <strong>More accurate forecast base</strong>
         <span>Your paystub history suggests a typical take-home rate of ${estimate.takeHomePercent.toFixed(1)}%, about ${formatCurrency(estimate.averageHourlyNet)} net per hour, and ${estimate.averageOvertimeHours.toFixed(2)} average OT hours.</span>
       </div>
-    `
+    `,
   );
 
   if (el.paystubHistoryList) {
-    const deleteButtons = el.paystubHistoryList.querySelectorAll("[data-paystub-delete]");
+    const deleteButtons = el.paystubHistoryList.querySelectorAll(
+      "[data-paystub-delete]",
+    );
     deleteButtons.forEach(function (button) {
       button.addEventListener("click", function () {
         const id = this.getAttribute("data-paystub-delete");
-        const index = paystubHistory.findIndex(function (entry) { return entry.id === id; });
+        const index = paystubHistory.findIndex(function (entry) {
+          return entry.id === id;
+        });
         if (index >= 0) {
           paystubHistory.splice(index, 1);
           refreshApp();
@@ -3979,6 +4692,14 @@ function renderPaystubHistory() {
 function analyzePaystubDraft() {
   latestParsedPaystub = parsePaystubText(el.paystubTextInput?.value || "");
   renderPaystubAnalysis();
+
+  if (!el.paystubTextInput?.value?.trim()) {
+    setPaystubOcrStatus("Add paystub text or scan a paystub image first.", "warning");
+  } else if (latestParsedPaystub) {
+    setPaystubOcrStatus("Text analyzed successfully. Review the values below before saving the parsed paystub.", "good");
+  } else {
+    setPaystubOcrStatus("Text was found, but the parser could not confidently map the key fields yet.", "warning");
+  }
 }
 
 function applyPaystubAverageToManualPaycheck() {
@@ -3988,7 +4709,6 @@ function applyPaystubAverageToManualPaycheck() {
   refreshApp();
 }
 
-
 function renderHouseholdSplitSummary() {
   if (!el.householdSplitSummary) return;
 
@@ -3997,7 +4717,10 @@ function renderHouseholdSplitSummary() {
   const selectedCategories = getSelectedSharedCategories();
 
   if (!selectedCategories.length) {
-    setHtml(el.householdSplitSummary, '<p class="timeline-empty">Choose at least one shared category to see how responsibilities are divided.</p>');
+    setHtml(
+      el.householdSplitSummary,
+      '<p class="timeline-empty">Choose at least one shared category to see how responsibilities are divided.</p>',
+    );
     return;
   }
 
@@ -4006,21 +4729,41 @@ function renderHouseholdSplitSummary() {
   for (let i = 0; i < bills.length; i++) {
     const bill = bills[i];
     if (isBillPaid(bill)) continue;
-    if (!selectedCategories.includes((bill.category || "other").toLowerCase().trim())) continue;
-    sharedMonthlyTotal += getMonthlyEquivalentAmount(bill.amount, bill.frequency || "monthly");
+    if (
+      !selectedCategories.includes(
+        (bill.category || "other").toLowerCase().trim(),
+      )
+    )
+      continue;
+    sharedMonthlyTotal += getMonthlyEquivalentAmount(
+      bill.amount,
+      bill.frequency || "monthly",
+    );
   }
 
   for (let i = 0; i < spendingBuckets.length; i++) {
     const bucket = spendingBuckets[i];
-    if (!selectedCategories.includes((bucket.category || "other").toLowerCase().trim())) continue;
-    sharedMonthlyTotal += getMonthlyEquivalentAmount(bucket.amount, bucket.frequency || "weekly");
+    if (
+      !selectedCategories.includes(
+        (bucket.category || "other").toLowerCase().trim(),
+      )
+    )
+      continue;
+    sharedMonthlyTotal += getMonthlyEquivalentAmount(
+      bucket.amount,
+      bucket.frequency || "weekly",
+    );
   }
 
   const nextPayDate = parseLocalDate(getEffectiveNextPayDateString());
   const sharedBeforePaydayMine = nextPayDate
     ? getCombinedItemsBeforePayday(nextPayDate)
-        .filter(function (item) { return isSharedCategory(item.category); })
-        .reduce(function (sum, item) { return sum + safeNumber(item.amount); }, 0)
+        .filter(function (item) {
+          return isSharedCategory(item.category);
+        })
+        .reduce(function (sum, item) {
+          return sum + safeNumber(item.amount);
+        }, 0)
     : 0;
 
   const myMonthly = round2(sharedMonthlyTotal * (mine / 100));
@@ -4048,7 +4791,7 @@ function renderHouseholdSplitSummary() {
         <span class="planner-chip">Partner estimated monthly share ${formatCurrency(partnerMonthly)}</span>
         <span class="planner-chip">My shared costs before payday ${formatCurrency(sharedBeforePaydayMine)}</span>
       </div>
-    `
+    `,
   );
 }
 
@@ -4058,10 +4801,20 @@ function renderForecastPlanningInsights() {
   const nextPayDate = parseLocalDate(getEffectiveNextPayDateString());
   const sharedActive = isHouseholdSplitActive();
   const mine = getMineSharePercent();
-  const checkingEvents = nextPayDate ? getCheckingLifeEventItemsBeforeDate(nextPayDate) : [];
-  const eventImpact = checkingEvents.reduce(function (sum, item) { return sum + safeNumber(item.amount); }, 0);
-  const savingsEvents = nextPayDate ? getLifeEventsUntilDate(nextPayDate).filter(function (event) { return event.funding === "savings"; }) : [];
-  const savingsImpact = savingsEvents.reduce(function (sum, event) { return sum + getLifeEventSignedAmount(event); }, 0);
+  const checkingEvents = nextPayDate
+    ? getCheckingLifeEventItemsBeforeDate(nextPayDate)
+    : [];
+  const eventImpact = checkingEvents.reduce(function (sum, item) {
+    return sum + safeNumber(item.amount);
+  }, 0);
+  const savingsEvents = nextPayDate
+    ? getLifeEventsUntilDate(nextPayDate).filter(function (event) {
+        return event.funding === "savings";
+      })
+    : [];
+  const savingsImpact = savingsEvents.reduce(function (sum, event) {
+    return sum + getLifeEventSignedAmount(event);
+  }, 0);
 
   setHtml(
     el.forecastPlanningInsights,
@@ -4074,10 +4827,9 @@ function renderForecastPlanningInsights() {
         <span class="planner-chip">Checking life-event impact before payday ${formatCurrency(eventImpact)}</span>
         <span class="planner-chip">Savings-funded event impact ${formatCurrency(savingsImpact)}</span>
       </div>
-    `
+    `,
   );
 }
-
 
 function clearDebtForm() {
   if (el.debtNameInput) el.debtNameInput.value = "";
@@ -4101,7 +4853,8 @@ function clearLifeEventForm() {
   lifeEventEditIndex = null;
 
   if (el.addLifeEventBtn) el.addLifeEventBtn.textContent = "Add Life Event";
-  if (el.cancelLifeEventEditBtn) el.cancelLifeEventEditBtn.classList.add("hidden");
+  if (el.cancelLifeEventEditBtn)
+    el.cancelLifeEventEditBtn.classList.add("hidden");
 }
 
 function getBestDebtTarget() {
@@ -4127,7 +4880,7 @@ function renderDebtPlannerSummary() {
   if (!debts.length) {
     setHtml(
       el.debtPlannerSummary,
-      '<p class="timeline-empty">Add debts here to see your total monthly debt attack and estimated payoff windows.</p>'
+      '<p class="timeline-empty">Add debts here to see your total monthly debt attack and estimated payoff windows.</p>',
     );
     return;
   }
@@ -4169,7 +4922,7 @@ function renderDebtPlannerSummary() {
             </div>`
           : ""
       }
-    `
+    `,
   );
 }
 
@@ -4179,13 +4932,15 @@ function renderDebts() {
   el.debtList.innerHTML = "";
 
   if (!debts.length) {
-    el.debtList.innerHTML = '<li class="timeline-empty">No debts added yet.</li>';
+    el.debtList.innerHTML =
+      '<li class="timeline-empty">No debts added yet.</li>';
     return;
   }
 
   for (let i = 0; i < debts.length; i++) {
     const debt = debts[i];
-    const plannedMonthly = safeNumber(debt.minPayment) + safeNumber(debt.extraPayment);
+    const plannedMonthly =
+      safeNumber(debt.minPayment) + safeNumber(debt.extraPayment);
     const payoff = estimateDebtPayoff(debt.balance, debt.apr, plannedMonthly);
 
     const item = document.createElement("li");
@@ -4232,9 +4987,12 @@ function renderDebts() {
       if (el.debtNameInput) el.debtNameInput.value = debt.name || "";
       if (el.debtBalanceInput) el.debtBalanceInput.value = debt.balance || "";
       if (el.debtAprInput) el.debtAprInput.value = debt.apr || "";
-      if (el.debtMinPaymentInput) el.debtMinPaymentInput.value = debt.minPayment || "";
-      if (el.debtExtraPaymentInput) el.debtExtraPaymentInput.value = debt.extraPayment || "";
-      if (el.debtPriorityInput) el.debtPriorityInput.value = debt.priority || "high-interest";
+      if (el.debtMinPaymentInput)
+        el.debtMinPaymentInput.value = debt.minPayment || "";
+      if (el.debtExtraPaymentInput)
+        el.debtExtraPaymentInput.value = debt.extraPayment || "";
+      if (el.debtPriorityInput)
+        el.debtPriorityInput.value = debt.priority || "high-interest";
 
       debtEditIndex = index;
       if (el.addDebtBtn) el.addDebtBtn.textContent = "Update Debt";
@@ -4258,25 +5016,43 @@ function renderLifeEventSummary() {
   if (!el.lifeEventSummary) return;
 
   const nextPayDate = parseLocalDate(el.nextPayDateInput?.value);
-  const eventsBeforePayday = nextPayDate ? getLifeEventsUntilDate(nextPayDate) : [];
-  const checkingImpactBeforePayday = getLifeEventSignedTotal(eventsBeforePayday, "checking");
-  const savingsImpactBeforePayday = getLifeEventSignedTotal(eventsBeforePayday, "savings");
+  const eventsBeforePayday = nextPayDate
+    ? getLifeEventsUntilDate(nextPayDate)
+    : [];
+  const checkingImpactBeforePayday = getLifeEventSignedTotal(
+    eventsBeforePayday,
+    "checking",
+  );
+  const savingsImpactBeforePayday = getLifeEventSignedTotal(
+    eventsBeforePayday,
+    "savings",
+  );
   const emergencyBalance = getEmergencySavingsBalance();
   const emergencyFloor = getEmergencyFloor();
   const projectedEmergency = emergencyBalance - savingsImpactBeforePayday;
   const risk = projectedEmergency < emergencyFloor;
 
   let expectedNet = safeNumber(el.nextPayAmountInput?.value);
-  const incomeScenarioResult = typeof getIncomeScenarioAmount === "function" ? getIncomeScenarioAmount() : null;
-  if (incomeScenarioResult && el.useIncomeScenarioForForecastInput?.value === "scenario") {
+  const incomeScenarioResult =
+    typeof getIncomeScenarioAmount === "function"
+      ? getIncomeScenarioAmount()
+      : null;
+  if (
+    incomeScenarioResult &&
+    el.useIncomeScenarioForForecastInput?.value === "scenario"
+  ) {
     expectedNet = safeNumber(incomeScenarioResult.scenarioAmount);
   }
 
-  const averageNet = expectedNet > 0 ? expectedNet : (getAveragePaycheckEstimate()?.averageNet || 0);
+  const averageNet =
+    expectedNet > 0
+      ? expectedNet
+      : getAveragePaycheckEstimate()?.averageNet || 0;
   const dailyTarget = averageNet / 5;
-  const hoursNeeded = dailyTarget > 0 && checkingImpactBeforePayday > 0
-    ? Math.ceil(checkingImpactBeforePayday / (dailyTarget / 8))
-    : 0;
+  const hoursNeeded =
+    dailyTarget > 0 && checkingImpactBeforePayday > 0
+      ? Math.ceil(checkingImpactBeforePayday / (dailyTarget / 8))
+      : 0;
 
   setHtml(
     el.lifeEventSummary,
@@ -4303,7 +5079,7 @@ function renderLifeEventSummary() {
             : `Based on your current paycheck estimate, recovering ${formatCurrency(checkingImpactBeforePayday)} would take about ${hoursNeeded || 0} extra work hour${hoursNeeded === 1 ? "" : "s"} at your normal pace.`
         }</span>
       </div>
-    `
+    `,
   );
 }
 
@@ -4313,7 +5089,8 @@ function renderLifeEvents() {
   el.lifeEventList.innerHTML = "";
 
   if (!lifeEvents.length) {
-    el.lifeEventList.innerHTML = '<li class="timeline-empty">No life events added yet.</li>';
+    el.lifeEventList.innerHTML =
+      '<li class="timeline-empty">No life events added yet.</li>';
     return;
   }
 
@@ -4356,14 +5133,19 @@ function renderLifeEvents() {
       if (!event) return;
 
       if (el.lifeEventNameInput) el.lifeEventNameInput.value = event.name || "";
-      if (el.lifeEventTypeInput) el.lifeEventTypeInput.value = event.type || "expense";
-      if (el.lifeEventAmountInput) el.lifeEventAmountInput.value = event.amount || "";
+      if (el.lifeEventTypeInput)
+        el.lifeEventTypeInput.value = event.type || "expense";
+      if (el.lifeEventAmountInput)
+        el.lifeEventAmountInput.value = event.amount || "";
       if (el.lifeEventDateInput) el.lifeEventDateInput.value = event.date || "";
-      if (el.lifeEventFundingInput) el.lifeEventFundingInput.value = event.funding || "checking";
+      if (el.lifeEventFundingInput)
+        el.lifeEventFundingInput.value = event.funding || "checking";
 
       lifeEventEditIndex = index;
-      if (el.addLifeEventBtn) el.addLifeEventBtn.textContent = "Update Life Event";
-      if (el.cancelLifeEventEditBtn) el.cancelLifeEventEditBtn.classList.remove("hidden");
+      if (el.addLifeEventBtn)
+        el.addLifeEventBtn.textContent = "Update Life Event";
+      if (el.cancelLifeEventEditBtn)
+        el.cancelLifeEventEditBtn.classList.remove("hidden");
       switchTab("moreTab");
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
@@ -4502,7 +5284,7 @@ function advanceRecurringBills() {
         billDate = new Date(
           billDate.getFullYear() + 1,
           billDate.getMonth(),
-          billDate.getDate()
+          billDate.getDate(),
         );
       } else {
         break;
@@ -4548,16 +5330,22 @@ function loadEstimatorData() {
   try {
     const data = JSON.parse(savedEstimatorData);
 
-    if (el.paycheck1GrossInput) el.paycheck1GrossInput.value = data.paycheck1Gross || "";
-    if (el.paycheck1NetInput) el.paycheck1NetInput.value = data.paycheck1Net || "";
+    if (el.paycheck1GrossInput)
+      el.paycheck1GrossInput.value = data.paycheck1Gross || "";
+    if (el.paycheck1NetInput)
+      el.paycheck1NetInput.value = data.paycheck1Net || "";
     if (el.paycheck1OtInput) el.paycheck1OtInput.value = data.paycheck1Ot || "";
 
-    if (el.paycheck2GrossInput) el.paycheck2GrossInput.value = data.paycheck2Gross || "";
-    if (el.paycheck2NetInput) el.paycheck2NetInput.value = data.paycheck2Net || "";
+    if (el.paycheck2GrossInput)
+      el.paycheck2GrossInput.value = data.paycheck2Gross || "";
+    if (el.paycheck2NetInput)
+      el.paycheck2NetInput.value = data.paycheck2Net || "";
     if (el.paycheck2OtInput) el.paycheck2OtInput.value = data.paycheck2Ot || "";
 
-    if (el.paycheck3GrossInput) el.paycheck3GrossInput.value = data.paycheck3Gross || "";
-    if (el.paycheck3NetInput) el.paycheck3NetInput.value = data.paycheck3Net || "";
+    if (el.paycheck3GrossInput)
+      el.paycheck3GrossInput.value = data.paycheck3Gross || "";
+    if (el.paycheck3NetInput)
+      el.paycheck3NetInput.value = data.paycheck3Net || "";
     if (el.paycheck3OtInput) el.paycheck3OtInput.value = data.paycheck3Ot || "";
   } catch (error) {
     console.error("Failed to load estimator data:", error);
@@ -4569,7 +5357,9 @@ function saveIncomePlanningData() {
   const incomePlanningData = {
     baseNetPay: el.baseNetPayInput ? el.baseNetPayInput.value : "",
     expectedOtNet: el.expectedOtNetInput ? el.expectedOtNetInput.value : "",
-    incomeScenario: el.incomeScenarioInput ? el.incomeScenarioInput.value : "realistic",
+    incomeScenario: el.incomeScenarioInput
+      ? el.incomeScenarioInput.value
+      : "realistic",
     useIncomeScenarioForForecast: el.useIncomeScenarioForForecastInput
       ? el.useIncomeScenarioForForecastInput.value
       : "manual",
@@ -4586,10 +5376,13 @@ function loadIncomePlanningData() {
     const data = JSON.parse(savedIncomePlanningData);
 
     if (el.baseNetPayInput) el.baseNetPayInput.value = data.baseNetPay || "";
-    if (el.expectedOtNetInput) el.expectedOtNetInput.value = data.expectedOtNet || "";
-    if (el.incomeScenarioInput) el.incomeScenarioInput.value = data.incomeScenario || "realistic";
+    if (el.expectedOtNetInput)
+      el.expectedOtNetInput.value = data.expectedOtNet || "";
+    if (el.incomeScenarioInput)
+      el.incomeScenarioInput.value = data.incomeScenario || "realistic";
     if (el.useIncomeScenarioForForecastInput) {
-      el.useIncomeScenarioForForecastInput.value = data.useIncomeScenarioForForecast || "manual";
+      el.useIncomeScenarioForForecastInput.value =
+        data.useIncomeScenarioForForecast || "manual";
     }
   } catch (error) {
     console.error("Failed to load income planning data:", error);
@@ -4605,22 +5398,36 @@ function saveData() {
     nextPayDate: el.nextPayDateInput.value,
     nextPayAmount: el.nextPayAmountInput.value,
     payFrequency: el.payFrequencyInput.value,
-    allocationMode: el.allocationModeInput ? el.allocationModeInput.value : "normal",
+    allocationMode: el.allocationModeInput
+      ? el.allocationModeInput.value
+      : "normal",
     debts,
     lifeEvents,
-    emergencySavingsBalance: el.emergencySavingsBalanceInput ? el.emergencySavingsBalanceInput.value : "",
+    emergencySavingsBalance: el.emergencySavingsBalanceInput
+      ? el.emergencySavingsBalanceInput.value
+      : "",
     emergencyFloor: el.emergencyFloorInput ? el.emergencyFloorInput.value : "",
-    householdMyShare: el.householdMyShareInput ? el.householdMyShareInput.value : "70",
-    householdPartnerShare: el.householdPartnerShareInput ? el.householdPartnerShareInput.value : "30",
+    householdMyShare: el.householdMyShareInput
+      ? el.householdMyShareInput.value
+      : "70",
+    householdPartnerShare: el.householdPartnerShareInput
+      ? el.householdPartnerShareInput.value
+      : "30",
     applyHouseholdSplit: Boolean(el.applyHouseholdSplitInput?.checked),
     sharedCategories: getSelectedSharedCategories(),
     workPlannerData: {
       hourlyRate: el.workHourlyRateInput ? el.workHourlyRateInput.value : "",
       baseHours: el.workBaseHoursInput ? el.workBaseHoursInput.value : "40",
-      otMultiplier: el.workOtMultiplierInput ? el.workOtMultiplierInput.value : "1.5",
-      targetBuffer: el.workTargetBufferInput ? el.workTargetBufferInput.value : "0",
+      otMultiplier: el.workOtMultiplierInput
+        ? el.workOtMultiplierInput.value
+        : "1.5",
+      targetBuffer: el.workTargetBufferInput
+        ? el.workTargetBufferInput.value
+        : "0",
       extraGoal: el.workExtraGoalInput ? el.workExtraGoalInput.value : "0",
-      netRetention: el.workNetRetentionInput ? el.workNetRetentionInput.value : "",
+      netRetention: el.workNetRetentionInput
+        ? el.workNetRetentionInput.value
+        : "",
     },
     paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
     paystubHistory,
@@ -4629,10 +5436,13 @@ function saveData() {
   localStorage.setItem(STORAGE_KEYS.app, JSON.stringify(data));
 
   if (el.saveIndicator) {
-    el.saveIndicator.textContent = `Saved locally • ${new Date().toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-    })}`;
+    el.saveIndicator.textContent = `Saved locally • ${new Date().toLocaleTimeString(
+      [],
+      {
+        hour: "numeric",
+        minute: "2-digit",
+      },
+    )}`;
   }
 }
 
@@ -4663,7 +5473,9 @@ function loadData() {
     }
     if (Array.isArray(data.sharedCategories) && el.sharedCategoryInputs) {
       Array.from(el.sharedCategoryInputs).forEach(function (input) {
-        input.checked = data.sharedCategories.includes((input.dataset.category || "other").toLowerCase().trim());
+        input.checked = data.sharedCategories.includes(
+          (input.dataset.category || "other").toLowerCase().trim(),
+        );
       });
     }
 
@@ -4723,7 +5535,9 @@ function loadData() {
         spendingBuckets.push({
           name: data.spendingBuckets[i].name || "",
           amount: safeNumber(data.spendingBuckets[i].amount),
-          category: (data.spendingBuckets[i].category || "other").toLowerCase().trim(),
+          category: (data.spendingBuckets[i].category || "other")
+            .toLowerCase()
+            .trim(),
           frequency: data.spendingBuckets[i].frequency || "weekly",
         });
       }
@@ -4761,14 +5575,18 @@ function loadData() {
       }
     }
 
-    if (el.paystubTextInput) el.paystubTextInput.value = data.paystubDraft ?? "";
+    if (el.paystubTextInput)
+      el.paystubTextInput.value = data.paystubDraft ?? "";
 
     el.currentBalanceInput.value = data.currentBalance ?? "";
     el.nextPayDateInput.value = data.nextPayDate ?? "";
     el.nextPayAmountInput.value = data.nextPayAmount ?? "";
     el.payFrequencyInput.value = data.payFrequency ?? "biweekly";
-    if (el.emergencySavingsBalanceInput) el.emergencySavingsBalanceInput.value = data.emergencySavingsBalance ?? "";
-    if (el.emergencyFloorInput) el.emergencyFloorInput.value = data.emergencyFloor ?? "";
+    if (el.emergencySavingsBalanceInput)
+      el.emergencySavingsBalanceInput.value =
+        data.emergencySavingsBalance ?? "";
+    if (el.emergencyFloorInput)
+      el.emergencyFloorInput.value = data.emergencyFloor ?? "";
 
     refreshApp();
   } catch (error) {
@@ -4786,26 +5604,38 @@ function exportData() {
     nextPayDate: el.nextPayDateInput.value,
     nextPayAmount: el.nextPayAmountInput.value,
     payFrequency: el.payFrequencyInput.value,
-    allocationMode: el.allocationModeInput ? el.allocationModeInput.value : "normal",
+    allocationMode: el.allocationModeInput
+      ? el.allocationModeInput.value
+      : "normal",
     debts,
     lifeEvents,
-    emergencySavingsBalance: el.emergencySavingsBalanceInput ? el.emergencySavingsBalanceInput.value : "",
+    emergencySavingsBalance: el.emergencySavingsBalanceInput
+      ? el.emergencySavingsBalanceInput.value
+      : "",
     emergencyFloor: el.emergencyFloorInput ? el.emergencyFloorInput.value : "",
     estimatorData: {
-      paycheck1Gross: el.paycheck1GrossInput ? el.paycheck1GrossInput.value : "",
+      paycheck1Gross: el.paycheck1GrossInput
+        ? el.paycheck1GrossInput.value
+        : "",
       paycheck1Net: el.paycheck1NetInput ? el.paycheck1NetInput.value : "",
       paycheck1Ot: el.paycheck1OtInput ? el.paycheck1OtInput.value : "",
-      paycheck2Gross: el.paycheck2GrossInput ? el.paycheck2GrossInput.value : "",
+      paycheck2Gross: el.paycheck2GrossInput
+        ? el.paycheck2GrossInput.value
+        : "",
       paycheck2Net: el.paycheck2NetInput ? el.paycheck2NetInput.value : "",
       paycheck2Ot: el.paycheck2OtInput ? el.paycheck2OtInput.value : "",
-      paycheck3Gross: el.paycheck3GrossInput ? el.paycheck3GrossInput.value : "",
+      paycheck3Gross: el.paycheck3GrossInput
+        ? el.paycheck3GrossInput.value
+        : "",
       paycheck3Net: el.paycheck3NetInput ? el.paycheck3NetInput.value : "",
       paycheck3Ot: el.paycheck3OtInput ? el.paycheck3OtInput.value : "",
     },
     incomePlanningData: {
       baseNetPay: el.baseNetPayInput ? el.baseNetPayInput.value : "",
       expectedOtNet: el.expectedOtNetInput ? el.expectedOtNetInput.value : "",
-      incomeScenario: el.incomeScenarioInput ? el.incomeScenarioInput.value : "realistic",
+      incomeScenario: el.incomeScenarioInput
+        ? el.incomeScenarioInput.value
+        : "realistic",
       useIncomeScenarioForForecast: el.useIncomeScenarioForForecastInput
         ? el.useIncomeScenarioForForecastInput.value
         : "manual",
@@ -4813,10 +5643,16 @@ function exportData() {
     workPlannerData: {
       hourlyRate: el.workHourlyRateInput ? el.workHourlyRateInput.value : "",
       baseHours: el.workBaseHoursInput ? el.workBaseHoursInput.value : "40",
-      otMultiplier: el.workOtMultiplierInput ? el.workOtMultiplierInput.value : "1.5",
-      targetBuffer: el.workTargetBufferInput ? el.workTargetBufferInput.value : "0",
+      otMultiplier: el.workOtMultiplierInput
+        ? el.workOtMultiplierInput.value
+        : "1.5",
+      targetBuffer: el.workTargetBufferInput
+        ? el.workTargetBufferInput.value
+        : "0",
       extraGoal: el.workExtraGoalInput ? el.workExtraGoalInput.value : "0",
-      netRetention: el.workNetRetentionInput ? el.workNetRetentionInput.value : "",
+      netRetention: el.workNetRetentionInput
+        ? el.workNetRetentionInput.value
+        : "",
     },
     paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
     paystubHistory,
@@ -4834,10 +5670,20 @@ function exportData() {
   URL.revokeObjectURL(url);
 }
 
-
 function exportBillsCsv() {
   const rows = [
-    ["Name", "Amount", "Due Date", "Category", "Frequency", "Priority", "Auto Pay", "Reminder Days", "Paid", "Notes"]
+    [
+      "Name",
+      "Amount",
+      "Due Date",
+      "Category",
+      "Frequency",
+      "Priority",
+      "Auto Pay",
+      "Reminder Days",
+      "Paid",
+      "Notes",
+    ],
   ];
 
   bills.forEach(function (bill) {
@@ -4851,7 +5697,7 @@ function exportBillsCsv() {
       bill.autopay ? "Yes" : "No",
       Math.max(0, Math.round(safeNumber(bill.reminderDays))),
       bill.paid ? "Yes" : "No",
-      (bill.notes || "").replace(/\r?\n/g, " ")
+      (bill.notes || "").replace(/\r?\n/g, " "),
     ]);
   });
 
@@ -4907,13 +5753,26 @@ function importData(file) {
         }
       }
 
-      if (el.householdMyShareInput) el.householdMyShareInput.value = importedData.householdMyShare ?? (el.householdMyShareInput.value || "70");
-      if (el.householdPartnerShareInput) el.householdPartnerShareInput.value = importedData.householdPartnerShare ?? (el.householdPartnerShareInput.value || "30");
+      if (el.householdMyShareInput)
+        el.householdMyShareInput.value =
+          importedData.householdMyShare ??
+          (el.householdMyShareInput.value || "70");
+      if (el.householdPartnerShareInput)
+        el.householdPartnerShareInput.value =
+          importedData.householdPartnerShare ??
+          (el.householdPartnerShareInput.value || "30");
       syncHouseholdShareInputs("mine");
-      if (el.applyHouseholdSplitInput) el.applyHouseholdSplitInput.checked = importedData.applyHouseholdSplit !== false;
-      if (Array.isArray(importedData.sharedCategories) && el.sharedCategoryInputs) {
+      if (el.applyHouseholdSplitInput)
+        el.applyHouseholdSplitInput.checked =
+          importedData.applyHouseholdSplit !== false;
+      if (
+        Array.isArray(importedData.sharedCategories) &&
+        el.sharedCategoryInputs
+      ) {
         Array.from(el.sharedCategoryInputs).forEach(function (input) {
-          input.checked = importedData.sharedCategories.includes((input.dataset.category || "other").toLowerCase().trim());
+          input.checked = importedData.sharedCategories.includes(
+            (input.dataset.category || "other").toLowerCase().trim(),
+          );
         });
       }
 
@@ -4944,7 +5803,10 @@ function importData(file) {
         }
       }
 
-      if (importedData.spendingBuckets && Array.isArray(importedData.spendingBuckets)) {
+      if (
+        importedData.spendingBuckets &&
+        Array.isArray(importedData.spendingBuckets)
+      ) {
         for (let i = 0; i < importedData.spendingBuckets.length; i++) {
           const bucket = importedData.spendingBuckets[i];
 
@@ -4961,8 +5823,11 @@ function importData(file) {
       el.nextPayDateInput.value = importedData.nextPayDate || "";
       el.nextPayAmountInput.value = importedData.nextPayAmount || "";
       el.payFrequencyInput.value = importedData.payFrequency || "biweekly";
-      if (el.emergencySavingsBalanceInput) el.emergencySavingsBalanceInput.value = importedData.emergencySavingsBalance || "";
-      if (el.emergencyFloorInput) el.emergencyFloorInput.value = importedData.emergencyFloor || "";
+      if (el.emergencySavingsBalanceInput)
+        el.emergencySavingsBalanceInput.value =
+          importedData.emergencySavingsBalance || "";
+      if (el.emergencyFloorInput)
+        el.emergencyFloorInput.value = importedData.emergencyFloor || "";
 
       if (el.allocationModeInput) {
         el.allocationModeInput.value = importedData.allocationMode || "normal";
@@ -4971,17 +5836,26 @@ function importData(file) {
       if (importedData.estimatorData) {
         const estimator = importedData.estimatorData;
 
-        if (el.paycheck1GrossInput) el.paycheck1GrossInput.value = estimator.paycheck1Gross || "";
-        if (el.paycheck1NetInput) el.paycheck1NetInput.value = estimator.paycheck1Net || "";
-        if (el.paycheck1OtInput) el.paycheck1OtInput.value = estimator.paycheck1Ot || "";
+        if (el.paycheck1GrossInput)
+          el.paycheck1GrossInput.value = estimator.paycheck1Gross || "";
+        if (el.paycheck1NetInput)
+          el.paycheck1NetInput.value = estimator.paycheck1Net || "";
+        if (el.paycheck1OtInput)
+          el.paycheck1OtInput.value = estimator.paycheck1Ot || "";
 
-        if (el.paycheck2GrossInput) el.paycheck2GrossInput.value = estimator.paycheck2Gross || "";
-        if (el.paycheck2NetInput) el.paycheck2NetInput.value = estimator.paycheck2Net || "";
-        if (el.paycheck2OtInput) el.paycheck2OtInput.value = estimator.paycheck2Ot || "";
+        if (el.paycheck2GrossInput)
+          el.paycheck2GrossInput.value = estimator.paycheck2Gross || "";
+        if (el.paycheck2NetInput)
+          el.paycheck2NetInput.value = estimator.paycheck2Net || "";
+        if (el.paycheck2OtInput)
+          el.paycheck2OtInput.value = estimator.paycheck2Ot || "";
 
-        if (el.paycheck3GrossInput) el.paycheck3GrossInput.value = estimator.paycheck3Gross || "";
-        if (el.paycheck3NetInput) el.paycheck3NetInput.value = estimator.paycheck3Net || "";
-        if (el.paycheck3OtInput) el.paycheck3OtInput.value = estimator.paycheck3Ot || "";
+        if (el.paycheck3GrossInput)
+          el.paycheck3GrossInput.value = estimator.paycheck3Gross || "";
+        if (el.paycheck3NetInput)
+          el.paycheck3NetInput.value = estimator.paycheck3Net || "";
+        if (el.paycheck3OtInput)
+          el.paycheck3OtInput.value = estimator.paycheck3Ot || "";
 
         saveEstimatorData();
         refreshEstimator();
@@ -4990,9 +5864,13 @@ function importData(file) {
       if (importedData.incomePlanningData) {
         const incomeData = importedData.incomePlanningData;
 
-        if (el.baseNetPayInput) el.baseNetPayInput.value = incomeData.baseNetPay || "";
-        if (el.expectedOtNetInput) el.expectedOtNetInput.value = incomeData.expectedOtNet || "";
-        if (el.incomeScenarioInput) el.incomeScenarioInput.value = incomeData.incomeScenario || "realistic";
+        if (el.baseNetPayInput)
+          el.baseNetPayInput.value = incomeData.baseNetPay || "";
+        if (el.expectedOtNetInput)
+          el.expectedOtNetInput.value = incomeData.expectedOtNet || "";
+        if (el.incomeScenarioInput)
+          el.incomeScenarioInput.value =
+            incomeData.incomeScenario || "realistic";
         if (el.useIncomeScenarioForForecastInput) {
           el.useIncomeScenarioForForecastInput.value =
             incomeData.useIncomeScenarioForForecast || "manual";
@@ -5004,12 +5882,18 @@ function importData(file) {
 
       if (importedData.workPlannerData) {
         const workData = importedData.workPlannerData;
-        if (el.workHourlyRateInput) el.workHourlyRateInput.value = workData.hourlyRate || "";
-        if (el.workBaseHoursInput) el.workBaseHoursInput.value = workData.baseHours || "40";
-        if (el.workOtMultiplierInput) el.workOtMultiplierInput.value = workData.otMultiplier || "1.5";
-        if (el.workTargetBufferInput) el.workTargetBufferInput.value = workData.targetBuffer || "0";
-        if (el.workExtraGoalInput) el.workExtraGoalInput.value = workData.extraGoal || "0";
-        if (el.workNetRetentionInput) el.workNetRetentionInput.value = workData.netRetention || "";
+        if (el.workHourlyRateInput)
+          el.workHourlyRateInput.value = workData.hourlyRate || "";
+        if (el.workBaseHoursInput)
+          el.workBaseHoursInput.value = workData.baseHours || "40";
+        if (el.workOtMultiplierInput)
+          el.workOtMultiplierInput.value = workData.otMultiplier || "1.5";
+        if (el.workTargetBufferInput)
+          el.workTargetBufferInput.value = workData.targetBuffer || "0";
+        if (el.workExtraGoalInput)
+          el.workExtraGoalInput.value = workData.extraGoal || "0";
+        if (el.workNetRetentionInput)
+          el.workNetRetentionInput.value = workData.netRetention || "";
       }
 
       refreshApp();
@@ -5083,7 +5967,10 @@ if (el.addBillBtn) {
     const priority = el.billPriorityInput.value;
     const notes = el.billNotesInput ? el.billNotesInput.value.trim() : "";
     const autopay = Boolean(el.billAutopayInput?.checked);
-    const reminderDays = Math.max(0, Math.round(safeNumber(el.billReminderDaysInput?.value)));
+    const reminderDays = Math.max(
+      0,
+      Math.round(safeNumber(el.billReminderDaysInput?.value)),
+    );
 
     if (name === "" || Number.isNaN(amount) || dueDate === "") {
       alert("Please fill out bill name, amount, and due date.");
@@ -5132,7 +6019,7 @@ if (el.exportCsvBtn) {
 if (el.resetAppBtn) {
   el.resetAppBtn.addEventListener("click", function () {
     const confirmed = confirm(
-      "This will delete ALL saved data including bills, balances, buckets, and paycheck info. Continue?"
+      "This will delete ALL saved data including bills, balances, buckets, and paycheck info. Continue?",
     );
 
     if (!confirmed) return;
@@ -5278,7 +6165,9 @@ if (el.addBucketBtn) {
   el.addBucketBtn.addEventListener("click", function () {
     const name = el.bucketNameInput.value.trim();
     const amount = parseFloat(el.bucketAmountInput.value);
-    const category = (el.bucketCategoryInput?.value || "other").toLowerCase().trim();
+    const category = (el.bucketCategoryInput?.value || "other")
+      .toLowerCase()
+      .trim();
     const frequency = el.bucketFrequencyInput.value;
 
     if (!name || Number.isNaN(amount)) {
@@ -5352,7 +6241,6 @@ if (el.importFileInput) {
   });
 }
 
-
 bindDashboardInput(el.emergencySavingsBalanceInput);
 bindDashboardInput(el.emergencyFloorInput);
 bindDashboardInput(el.workHourlyRateInput);
@@ -5379,6 +6267,19 @@ addEstimatorInputListener(el.paycheck3GrossInput);
 addEstimatorInputListener(el.paycheck3NetInput);
 addEstimatorInputListener(el.paycheck3OtInput);
 
+if (el.scanPaystubImageBtn) {
+  el.scanPaystubImageBtn.addEventListener("click", function () {
+    scanPaystubImage();
+  });
+}
+
+if (el.paystubImageInput) {
+  el.paystubImageInput.addEventListener("change", function () {
+    latestParsedPaystub = null;
+    setPaystubOcrStatus("Image selected. Tap Scan Image to extract the paystub text.", "info");
+  });
+}
+
 if (el.analyzePaystubBtn) {
   el.analyzePaystubBtn.addEventListener("click", analyzePaystubDraft);
 }
@@ -5387,15 +6288,23 @@ if (el.clearPaystubBtn) {
   el.clearPaystubBtn.addEventListener("click", function () {
     latestParsedPaystub = null;
     if (el.paystubTextInput) el.paystubTextInput.value = "";
+    if (el.paystubImageInput) el.paystubImageInput.value = "";
+    setPaystubOcrStatus("Upload a paystub image or paste paystub text to begin.", "info");
     refreshApp();
   });
 }
 
 if (el.paystubTextInput) {
   el.paystubTextInput.addEventListener("input", function () {
+    if (isProgrammaticPaystubUpdate) return;
+
     latestParsedPaystub = null;
     saveData();
     renderPaystubAnalysis();
+
+    if (el.paystubTextInput.value.trim()) {
+      setPaystubOcrStatus("Text updated. Tap Analyze Extracted Text to parse the paystub.", "info");
+    }
   });
 }
 
@@ -5417,15 +6326,16 @@ if (el.addParsedPaystubBtn) {
 }
 
 if (el.usePaystubAverageBtn) {
-  el.usePaystubAverageBtn.addEventListener("click", applyPaystubAverageToManualPaycheck);
+  el.usePaystubAverageBtn.addEventListener(
+    "click",
+    applyPaystubAverageToManualPaycheck,
+  );
 }
 
 bindDashboardInput(el.currentBalanceInput);
 bindDashboardInput(el.nextPayDateInput);
 bindDashboardInput(el.nextPayAmountInput);
 bindDashboardInput(el.payFrequencyInput);
-
-
 
 /* =========================
    COLLAPSIBLE CARD UI
@@ -5436,7 +6346,9 @@ let collapseState = {};
 
 function loadCollapseState() {
   try {
-    collapseState = JSON.parse(localStorage.getItem(COLLAPSE_STATE_KEY) || "{}");
+    collapseState = JSON.parse(
+      localStorage.getItem(COLLAPSE_STATE_KEY) || "{}",
+    );
   } catch (error) {
     collapseState = {};
   }
@@ -5513,12 +6425,12 @@ function setCardCollapsed(card, collapsed) {
   }
 }
 
-
 function openCollapsibleCard(card) {
   if (!card) return;
   if (!card.matches(".card[data-collapsible='true']")) return;
 
-  const key = card.dataset.collapseKey || card.getAttribute("data-collapse-key");
+  const key =
+    card.dataset.collapseKey || card.getAttribute("data-collapse-key");
   if (key) {
     collapseState[key] = false;
     saveCollapseState();
@@ -5561,7 +6473,9 @@ function initializeCollapsibleCards() {
     const key = card.getAttribute("data-collapse-key") || `card-${index}`;
     card.dataset.collapseKey = key;
 
-    let heading = card.querySelector(":scope > .section-heading") || card.querySelector(":scope > h2");
+    let heading =
+      card.querySelector(":scope > .section-heading") ||
+      card.querySelector(":scope > h2");
     if (!heading) return;
 
     const body = document.createElement("div");
@@ -5587,18 +6501,23 @@ function initializeCollapsibleCards() {
       heading = headingWrap;
     }
 
-    const headingRow = heading.classList.contains("section-heading") ? heading : card.querySelector(":scope > .section-heading");
+    const headingRow = heading.classList.contains("section-heading")
+      ? heading
+      : card.querySelector(":scope > .section-heading");
     if (!headingRow) return;
 
     const action = document.createElement("button");
     action.type = "button";
     action.className = "card-collapse-toggle";
-    action.innerHTML = '<span class="card-collapse-toggle-label">Hide details</span><span class="card-collapse-toggle-icon" aria-hidden="true">⌄</span>';
+    action.innerHTML =
+      '<span class="card-collapse-toggle-label">Hide details</span><span class="card-collapse-toggle-icon" aria-hidden="true">⌄</span>';
     headingRow.appendChild(action);
     card.appendChild(body);
 
     const defaultCollapsed = card.getAttribute("data-collapsed") === "true";
-    const collapsed = Object.prototype.hasOwnProperty.call(collapseState, key) ? collapseState[key] : defaultCollapsed;
+    const collapsed = Object.prototype.hasOwnProperty.call(collapseState, key)
+      ? collapseState[key]
+      : defaultCollapsed;
     setCardCollapsed(card, collapsed);
 
     action.addEventListener("click", function () {
@@ -5622,7 +6541,7 @@ function setupPlanChipNavigation() {
     planTimelineChip: "payPeriodTimelineCard",
     planAssignmentsChip: "paycheckAssignmentsCard",
     planScenariosChip: "incomeScenariosCard",
-    planBalanceChip: "projectedBalanceChartCard"
+    planBalanceChip: "projectedBalanceChartCard",
   };
 
   Object.entries(chipMap).forEach(([chipId, cardId]) => {
@@ -5632,7 +6551,6 @@ function setupPlanChipNavigation() {
     if (!chip || !card) return;
 
     chip.addEventListener("click", () => {
-
       // open collapsed cards if needed
       const content = card.querySelector(".card-content");
       const toggle = card.querySelector(".card-toggle");
@@ -5645,14 +6563,13 @@ function setupPlanChipNavigation() {
       // smooth scroll
       card.scrollIntoView({
         behavior: "smooth",
-        block: "start"
+        block: "start",
       });
     });
   });
 }
 
 document.addEventListener("DOMContentLoaded", setupPlanChipNavigation);
-
 
 function getQuickActionTarget(config) {
   if (!config) return null;
@@ -5663,7 +6580,9 @@ function getQuickActionTarget(config) {
   }
 
   if (config.collapseKey) {
-    const byCollapseKey = document.querySelector(`[data-collapse-key="${config.collapseKey}"]`);
+    const byCollapseKey = document.querySelector(
+      `[data-collapse-key="${config.collapseKey}"]`,
+    );
     if (byCollapseKey) return byCollapseKey;
   }
 
@@ -5681,21 +6600,25 @@ function handleQuickAction(action) {
       tabId: "dashboardTab",
       targetId: "todaySetupCard",
       collapseKey: "today-setup",
-      selector: ".quick-plan-card[data-collapsible='true']"
+      selector: ".quick-plan-card[data-collapsible='true']",
     },
-    "bills-add": { tabId: "billsTab", targetId: "billEntryCard", selector: "#billEntryCard" },
+    "bills-add": {
+      tabId: "billsTab",
+      targetId: "billEntryCard",
+      selector: "#billEntryCard",
+    },
     "plan-scenario": {
       tabId: "forecastTab",
       targetId: "planScenariosCard",
       collapseKey: "forecast-stress",
-      selector: "#planScenariosCard"
+      selector: "#planScenariosCard",
     },
     "work-planner": {
       tabId: "dashboardTab",
       targetId: "workPlannerCard",
       collapseKey: "today-work-planner",
-      selector: "#workPlannerCard"
-    }
+      selector: "#workPlannerCard",
+    },
   };
 
   const config = actionMap[action];
@@ -5719,9 +6642,10 @@ function handleQuickAction(action) {
   }, 120);
 }
 
-
 function refreshAnimatedNodes() {
-  const animatedNodes = document.querySelectorAll("[data-animate-value='true']");
+  const animatedNodes = document.querySelectorAll(
+    "[data-animate-value='true']",
+  );
   animatedNodes.forEach(function (node) {
     animateNumberText(node, node.textContent);
   });
@@ -5758,6 +6682,8 @@ refreshIncomePlanning();
 refreshEstimator();
 renderBuckets();
 
+setPaystubOcrStatus("Upload a paystub image or paste paystub text to begin.", "info");
+
 const savedActiveTab = localStorage.getItem(ACTIVE_TAB_KEY);
 if (savedActiveTab && document.getElementById(savedActiveTab)) {
   switchTab(savedActiveTab);
@@ -5765,12 +6691,44 @@ if (savedActiveTab && document.getElementById(savedActiveTab)) {
   switchTab("dashboardTab");
 }
 
-if ("serviceWorker" in navigator) {
+/* =========================
+   SERVICE WORKER REGISTRATION
+========================= */
+
+(function initializeServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  var isLocalDev =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
   window.addEventListener("load", function () {
+    if (isLocalDev) {
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        registrations.forEach(function (registration) {
+          registration.unregister();
+        });
+      });
+
+      if ("caches" in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (key) {
+            if (key.indexOf("bill-planner-") === 0) {
+              caches.delete(key);
+            }
+          });
+        });
+      }
+
+      console.info("Service worker disabled in local development.");
+      return;
+    }
+
     navigator.serviceWorker
       .register("service-worker.js")
       .catch(function (error) {
         console.error("Service worker registration failed:", error);
       });
   });
-}
+})();
+

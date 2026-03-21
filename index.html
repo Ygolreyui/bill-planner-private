@@ -973,15 +973,23 @@
             </div>
 
             <div class="form-group">
-              <label for="paystubText">Paystub Text</label>
-              <textarea id="paystubText" rows="10" placeholder="Paste paystub text here. Example labels the analyzer understands: Gross Pay, Net Pay, Federal Tax, Township Tax, HSA, 401(k), Regular Hours, Overtime Hours."></textarea>
+              <label for="paystubImageInput">Paystub Image</label>
+              <input type="file" id="paystubImageInput" accept="image/*" capture="environment" />
             </div>
 
+            <div id="paystubOcrStatus" class="warning-box">Upload a paystub image or screenshot, then tap Scan Image to extract text automatically.</div>
+
             <div class="form-buttons">
-              <button id="analyzePaystubBtn" type="button">Analyze Paystub</button>
+              <button id="scanPaystubImageBtn" type="button">Scan Image</button>
+              <button id="analyzePaystubBtn" type="button" class="secondary-btn">Analyze Extracted Text</button>
               <button id="addParsedPaystubBtn" type="button" class="secondary-btn">Save Parsed Paystub</button>
               <button id="usePaystubAverageBtn" type="button" class="secondary-btn">Use Paystub Average for Next Paycheck</button>
               <button id="clearPaystubBtn" type="button" class="secondary-btn">Clear Draft</button>
+            </div>
+
+            <div class="form-group">
+              <label for="paystubText">Paystub Text</label>
+              <textarea id="paystubText" rows="10" placeholder="Scanned OCR text will appear here automatically. You can still paste paystub text manually and run Analyze Extracted Text."></textarea>
             </div>
 
             <div class="tools-panel">
@@ -1085,6 +1093,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
