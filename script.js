@@ -63,7 +63,11 @@ const el = {
   billCategoryInput: document.getElementById("billCategory"),
   billFrequencyInput: document.getElementById("billFrequency"),
   billPriorityInput: document.getElementById("billPriority"),
-  billFormCard: document.getElementById("billFormCard"),
+  billFormCard: document.getElementById("billEntryCard"),
+  billNotesInput: document.getElementById("billNotes"),
+  billAutopayInput: document.getElementById("billAutopay"),
+  billReminderDaysInput: document.getElementById("billReminderDays"),
+  exportCsvBtn: document.getElementById("exportCsvBtn"),
   addBillBtn: document.getElementById("addBillBtn"),
   cancelEditBtn: document.getElementById("cancelEditBtn"),
   billSearchInput: document.getElementById("billSearch"),
@@ -142,6 +146,15 @@ const el = {
   starterGuideCard: document.getElementById("starterGuideCard"),
   starterGuideSummary: document.getElementById("starterGuideSummary"),
   paycheckAllocationSummary: document.getElementById("paycheckAllocationSummary"),
+
+  paystubTextInput: document.getElementById("paystubText"),
+  analyzePaystubBtn: document.getElementById("analyzePaystubBtn"),
+  clearPaystubBtn: document.getElementById("clearPaystubBtn"),
+  paystubAnalysisResults: document.getElementById("paystubAnalysisResults"),
+  addParsedPaystubBtn: document.getElementById("addParsedPaystubBtn"),
+  usePaystubAverageBtn: document.getElementById("usePaystubAverageBtn"),
+  paystubHistoryList: document.getElementById("paystubHistoryList"),
+  paystubHistorySummary: document.getElementById("paystubHistorySummary"),
 };
 
 let categoryChart = null;
@@ -156,6 +169,9 @@ const bills = [];
 const spendingBuckets = [];
 const debts = [];
 const lifeEvents = [];
+const paystubHistory = [];
+
+let latestParsedPaystub = null;
 
 let editIndex = null;
 let bucketEditIndex = null;
@@ -500,6 +516,34 @@ function formatFrequency(frequency) {
     .join("-");
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function getBillReminderText(bill) {
+  const days = Math.max(0, Math.round(safeNumber(bill?.reminderDays)));
+  if (!days) return "";
+  return days === 1 ? "1-day reminder" : `${days}-day reminder`;
+}
+
+function getAutopayBillCount() {
+  return bills.filter(function (bill) { return Boolean(bill.autopay); }).length;
+}
+
+function getMonthlyRecurringBillsAmount() {
+  return round2(
+    bills.reduce(function (sum, bill) {
+      if (bill.frequency === "one-time") return sum;
+      return sum + getMonthlyEquivalentAmount(bill.amount, bill.frequency);
+    }, 0)
+  );
+}
+
 function formatDateTime(dateString) {
   if (!dateString) return "—";
 
@@ -669,7 +713,7 @@ function getEstimatedNetRetentionRate(workSettings) {
     return clamp(settings.manualNetRetentionPercent / 100, 0.45, 0.95);
   }
 
-  const estimate = getAveragePaycheckEstimate();
+  const estimate = getPreferredPaycheckEstimate();
   if (estimate && estimate.averageGross > 0 && estimate.averageNet > 0) {
     return clamp(estimate.averageNet / estimate.averageGross, 0.45, 0.95);
   }
@@ -1255,50 +1299,72 @@ function renderStressTestMessage() {
   }
 }
 
+
 function renderPaycheckEstimateResults() {
   if (!el.paycheckEstimateResults) return;
 
   const estimate = getAveragePaycheckEstimate();
+  const paystubEstimate = getPaystubHistoryEstimate();
 
-  if (!estimate) {
+  if (!estimate && !paystubEstimate) {
     setHtml(
       el.paycheckEstimateResults,
-      `<p class="timeline-empty">Enter at least one paycheck with both gross and net pay to see estimated results.</p>`
+      `<p class="timeline-empty">Enter at least one paycheck with both gross and net pay, or save a parsed paystub, to see estimated results.</p>`
     );
     return;
+  }
+
+  const cards = [];
+
+  if (estimate) {
+    cards.push(`
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Manual Avg Net (${estimate.count})</span>
+        <span class="estimate-result-value ${getBalanceStatus(estimate.averageNet)}">${formatCurrency(estimate.averageNet)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Manual Avg Gross</span>
+        <span class="estimate-result-value">${formatCurrency(estimate.averageGross)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Manual Avg OT Hours</span>
+        <span class="estimate-result-value">${estimate.averageOt.toFixed(1)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Manual Take-Home %</span>
+        <span class="estimate-result-value">${estimate.takeHomePercent.toFixed(1)}%</span>
+      </div>
+    `);
+  }
+
+  if (paystubEstimate) {
+    cards.push(`
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Paystub Avg Net (${paystubEstimate.count})</span>
+        <span class="estimate-result-value ${getBalanceStatus(paystubEstimate.averageNet)}">${formatCurrency(paystubEstimate.averageNet)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Paystub Avg Gross</span>
+        <span class="estimate-result-value">${formatCurrency(paystubEstimate.averageGross)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Avg Hours From Paystubs</span>
+        <span class="estimate-result-value">${paystubEstimate.averageHours.toFixed(2)}</span>
+      </div>
+      <div class="estimate-result-card">
+        <span class="estimate-result-label">Paystub Take-Home %</span>
+        <span class="estimate-result-value">${paystubEstimate.takeHomePercent.toFixed(1)}%</span>
+      </div>
+    `);
   }
 
   setHtml(
     el.paycheckEstimateResults,
     `
     <div class="estimate-results-grid">
-      <div class="estimate-result-card">
-        <span class="estimate-result-label">Paychecks Used</span>
-        <span class="estimate-result-value">${estimate.count}</span>
-      </div>
-
-      <div class="estimate-result-card">
-        <span class="estimate-result-label">Average Gross Pay</span>
-        <span class="estimate-result-value">${formatCurrency(estimate.averageGross)}</span>
-      </div>
-
-      <div class="estimate-result-card">
-        <span class="estimate-result-label">Average Net Pay</span>
-        <span class="estimate-result-value ${getBalanceStatus(estimate.averageNet)}">${formatCurrency(
-      estimate.averageNet
-    )}</span>
-      </div>
-
-      <div class="estimate-result-card">
-        <span class="estimate-result-label">Average OT Hours</span>
-        <span class="estimate-result-value">${estimate.averageOt.toFixed(1)}</span>
-      </div>
-
-      <div class="estimate-result-card">
-        <span class="estimate-result-label">Estimated Take-Home %</span>
-        <span class="estimate-result-value">${estimate.takeHomePercent.toFixed(1)}%</span>
-      </div>
+      ${cards.join("")}
     </div>
+    ${paystubEstimate ? `<div class="planner-chip-row"><span class="planner-chip">Best forecast source: Paystub history</span><span class="planner-chip">Avg hourly net ${formatCurrency(paystubEstimate.averageHourlyNet)}</span></div>` : ""}
   `
   );
 }
@@ -1454,6 +1520,8 @@ function renderWorkPlannerSummary() {
   const recommendedTakeHome = recommendedHours === null ? 0 : estimateTakeHomeForHours(recommendedHours, settings);
   const gapToClose = Math.max(0, requiredPaycheck - forecastPaycheck);
   const netRetention = getEstimatedNetRetentionRate(settings);
+  const modelEstimate = getPreferredPaycheckEstimate();
+  const modelSource = getPaystubHistoryEstimate() ? "Paystub history" : (getAveragePaycheckEstimate() ? "Manual paycheck average" : "Fallback retention rate");
   const safeRangeStart = recommendedHours === null ? null : recommendedHours;
   const safeRangeEnd = recommendedHours === null ? null : roundQuarterHour(recommendedHours + 5);
 
@@ -1567,6 +1635,23 @@ function renderBuckets() {
       enterBucketEditMode();
     });
 
+    const duplicateBtn = document.createElement("button");
+    duplicateBtn.textContent = "Duplicate";
+    duplicateBtn.className = "secondary-btn";
+    duplicateBtn.addEventListener("click", function () {
+      const nowIso = new Date().toISOString();
+      const clonedBill = {
+        ...bill,
+        name: `${bill.name} Copy`,
+        paid: false,
+        lastPaidDate: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      bills.push(clonedBill);
+      refreshApp();
+    });
+
     const deleteBtn = document.createElement("button");
     deleteBtn.textContent = "Delete";
     deleteBtn.className = "delete-btn";
@@ -1586,6 +1671,7 @@ function renderBuckets() {
     });
 
     buttonGroup.appendChild(editBtn);
+    buttonGroup.appendChild(duplicateBtn);
     buttonGroup.appendChild(deleteBtn);
     li.appendChild(buttonGroup);
     el.bucketList.appendChild(li);
@@ -1750,6 +1836,8 @@ function renderBills() {
             <span class="bill-chip">${formatCategory(bill.category)}</span>
             <span class="bill-chip bill-chip-soft">${formatFrequency(bill.frequency)}</span>
             <span class="bill-chip bill-chip-priority">${getPriorityLabel(bill.priority)}</span>
+            ${bill.autopay ? '<span class="bill-chip bill-chip-autopay">Auto-pay</span>' : ""}
+            ${getBillReminderText(bill) ? `<span class="bill-chip bill-chip-reminder">${getBillReminderText(bill)}</span>` : ""}
           </div>
         </div>
 
@@ -1759,7 +1847,7 @@ function renderBills() {
         </div>
       </div>
 
-      <div class="bill-subtext">${getBillSecondaryText(bill)}</div>
+      <div class="bill-subtext">${getBillSecondaryText(bill)}${bill.notes ? ` • ${escapeHtml(bill.notes)}` : ""}</div>
     `;
 
     const buttonGroup = document.createElement("div");
@@ -1794,6 +1882,9 @@ function renderBills() {
       el.billCategoryInput.value = (bill.category || "other").toLowerCase().trim();
       el.billFrequencyInput.value = bill.frequency || "one-time";
       el.billPriorityInput.value = bill.priority || "important";
+      if (el.billNotesInput) el.billNotesInput.value = bill.notes || "";
+      if (el.billAutopayInput) el.billAutopayInput.checked = Boolean(bill.autopay);
+      if (el.billReminderDaysInput) el.billReminderDaysInput.value = String(Math.max(0, safeNumber(bill.reminderDays)));
 
       editIndex = realIndex;
       enterEditMode();
@@ -1810,6 +1901,23 @@ function renderBills() {
           el.billFormCard.classList.add("bill-form-highlight");
         }, 300);
       }
+    });
+
+    const duplicateBtn = document.createElement("button");
+    duplicateBtn.textContent = "Duplicate";
+    duplicateBtn.className = "secondary-btn";
+    duplicateBtn.addEventListener("click", function () {
+      const nowIso = new Date().toISOString();
+      const clonedBill = {
+        ...bill,
+        name: `${bill.name} Copy`,
+        paid: false,
+        lastPaidDate: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+      bills.push(clonedBill);
+      refreshApp();
     });
 
     const deleteBtn = document.createElement("button");
@@ -1832,6 +1940,7 @@ function renderBills() {
 
     buttonGroup.appendChild(paidBtn);
     buttonGroup.appendChild(editBtn);
+    buttonGroup.appendChild(duplicateBtn);
     buttonGroup.appendChild(deleteBtn);
 
     li.appendChild(billText);
@@ -3501,6 +3610,387 @@ function getAveragePaycheckEstimate() {
 }
 
 
+function getAverageFromHistory(items, selector) {
+  if (!items || !items.length) return 0;
+
+  let total = 0;
+  let count = 0;
+
+  for (let i = 0; i < items.length; i++) {
+    const value = safeNumber(selector(items[i]));
+    if (value === 0 && selector(items[i]) !== 0) continue;
+    total += value;
+    count += 1;
+  }
+
+  return count ? total / count : 0;
+}
+
+function getPaystubHistoryEstimate() {
+  const validEntries = paystubHistory.filter(function (entry) {
+    return safeNumber(entry.gross) > 0 && safeNumber(entry.net) > 0;
+  });
+
+  if (!validEntries.length) return null;
+
+  const averageGross = getAverageFromHistory(validEntries, function (entry) { return entry.gross; });
+  const averageNet = getAverageFromHistory(validEntries, function (entry) { return entry.net; });
+  const averageRegularHours = getAverageFromHistory(validEntries, function (entry) { return entry.regularHours; });
+  const averageOvertimeHours = getAverageFromHistory(validEntries, function (entry) { return entry.overtimeHours; });
+  const averageTaxes = getAverageFromHistory(validEntries, function (entry) { return entry.taxTotal; });
+  const averageDeductions = getAverageFromHistory(validEntries, function (entry) { return entry.deductionTotal; });
+  const averageHours = averageRegularHours + averageOvertimeHours;
+  const averageHourlyNet = averageHours > 0 ? averageNet / averageHours : 0;
+  const averageHourlyGross = averageHours > 0 ? averageGross / averageHours : 0;
+  const takeHomePercent = averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
+
+  return {
+    count: validEntries.length,
+    averageGross,
+    averageNet,
+    averageRegularHours,
+    averageOvertimeHours,
+    averageHours,
+    averageHourlyNet,
+    averageHourlyGross,
+    averageTaxes,
+    averageDeductions,
+    takeHomePercent,
+  };
+}
+
+function getPreferredPaycheckEstimate() {
+  return getPaystubHistoryEstimate() || getAveragePaycheckEstimate();
+}
+
+function normalizePaystubText(text) {
+  return String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "\n")
+    .replace(/[\t]+/g, " ")
+    .replace(/ +/g, " ")
+    .trim();
+}
+
+function extractAmountByLabel(text, labels) {
+  if (!text) return 0;
+
+  for (let i = 0; i < labels.length; i++) {
+    const labelPattern = labels[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const regexes = [
+      new RegExp(labelPattern + "\\s*[:#-]?\\s*\$?(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
+      new RegExp(labelPattern + "[^\\n]*?\$(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
+    ];
+
+    for (let r = 0; r < regexes.length; r++) {
+      const match = text.match(regexes[r]);
+      if (match && match[1] !== undefined) {
+        return safeNumber(match[1].replace(/,/g, ""));
+      }
+    }
+  }
+
+  return 0;
+}
+
+function extractHoursByLabel(text, labels) {
+  if (!text) return 0;
+
+  for (let i = 0; i < labels.length; i++) {
+    const labelPattern = labels[i].replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    const regexes = [
+      new RegExp(labelPattern + "\\s*[:#-]?\\s*(-?\\d[\\d,]*\\.?\\d{0,2})", "i"),
+      new RegExp(labelPattern + "[^\\n]*?(-?\\d[\\d,]*\\.?\\d{0,2})\\s*(?:hrs|hours|hr)?", "i"),
+    ];
+
+    for (let r = 0; r < regexes.length; r++) {
+      const match = text.match(regexes[r]);
+      if (match && match[1] !== undefined) {
+        return safeNumber(match[1].replace(/,/g, ""));
+      }
+    }
+  }
+
+  return 0;
+}
+
+function extractPaystubDate(text) {
+  const normalized = normalizePaystubText(text);
+  const match = normalized.match(/(?:pay date|check date|date)\s*[:#-]?\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/i);
+  if (!match) return "";
+
+  const raw = match[1];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+
+  const parts = raw.split(/[\/\-]/).map(function (part) { return part.trim(); });
+  if (parts.length !== 3) return "";
+
+  let month = safeNumber(parts[0]);
+  let day = safeNumber(parts[1]);
+  let year = safeNumber(parts[2]);
+
+  if (year < 100) year += 2000;
+  if (!month || !day || !year) return "";
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parsePaystubText(text) {
+  const normalized = normalizePaystubText(text);
+  if (!normalized) return null;
+
+  const gross = extractAmountByLabel(normalized, [
+    "gross pay", "gross wages", "gross earnings", "gross amount", "total gross", "gross"
+  ]);
+  const net = extractAmountByLabel(normalized, [
+    "net pay", "net amount", "take home", "take-home", "direct deposit", "net"
+  ]);
+  const regularHours = extractHoursByLabel(normalized, [
+    "regular hours", "reg hours", "regular hrs", "hours worked", "worked hours"
+  ]);
+  const overtimeHours = extractHoursByLabel(normalized, [
+    "overtime hours", "ot hours", "ot hrs", "overtime hrs", "overtime"
+  ]);
+
+  const federalTax = extractAmountByLabel(normalized, [
+    "federal tax", "fed tax", "federal withholding", "federal"
+  ]);
+  const stateTax = extractAmountByLabel(normalized, [
+    "state tax", "state withholding", "state"
+  ]);
+  const localTax = extractAmountByLabel(normalized, [
+    "local tax", "township tax", "municipal tax", "city tax", "school tax"
+  ]);
+  const socialSecurity = extractAmountByLabel(normalized, [
+    "social security", "soc sec", "fica ss"
+  ]);
+  const medicare = extractAmountByLabel(normalized, [
+    "medicare", "fica med"
+  ]);
+  const hsa = extractAmountByLabel(normalized, [
+    "hsa", "health savings"
+  ]);
+  const retirement401k = extractAmountByLabel(normalized, [
+    "401k", "401(k)", "retirement"
+  ]);
+  const medical = extractAmountByLabel(normalized, [
+    "medical", "health insurance", "dental", "vision"
+  ]);
+  const bonus = extractAmountByLabel(normalized, [
+    "bonus", "incentive", "commission"
+  ]);
+
+  const taxTotal = federalTax + stateTax + localTax + socialSecurity + medicare;
+  let deductionTotal = hsa + retirement401k + medical;
+  const fallbackDifference = gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
+  if (deductionTotal + taxTotal < fallbackDifference) {
+    deductionTotal = Math.max(0, fallbackDifference - taxTotal);
+  }
+
+  const totalHours = regularHours + overtimeHours;
+  const takeHomePercent = gross > 0 ? (net / gross) * 100 : 0;
+  const effectiveHourlyNet = totalHours > 0 ? net / totalHours : 0;
+  const effectiveHourlyGross = totalHours > 0 ? gross / totalHours : 0;
+
+  if (gross <= 0 && net <= 0) return null;
+
+  return {
+    id: `paystub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    sourceText: normalized,
+    payDate: extractPaystubDate(normalized),
+    gross: round2(gross),
+    net: round2(net),
+    regularHours: round2(regularHours),
+    overtimeHours: round2(overtimeHours),
+    totalHours: round2(totalHours),
+    bonus: round2(bonus),
+    federalTax: round2(federalTax),
+    stateTax: round2(stateTax),
+    localTax: round2(localTax),
+    socialSecurity: round2(socialSecurity),
+    medicare: round2(medicare),
+    hsa: round2(hsa),
+    retirement401k: round2(retirement401k),
+    medical: round2(medical),
+    taxTotal: round2(taxTotal),
+    deductionTotal: round2(deductionTotal),
+    takeHomePercent: round2(takeHomePercent),
+    effectiveHourlyNet: round2(effectiveHourlyNet),
+    effectiveHourlyGross: round2(effectiveHourlyGross),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function renderPaystubAnalysis() {
+  if (!el.paystubAnalysisResults) return;
+
+  if (!latestParsedPaystub) {
+    setHtml(
+      el.paystubAnalysisResults,
+      '<p class="timeline-empty">Paste paystub text here to extract gross pay, net pay, taxes, deductions, hours, and a take-home estimate.</p>'
+    );
+    if (el.addParsedPaystubBtn) el.addParsedPaystubBtn.disabled = true;
+    return;
+  }
+
+  if (el.addParsedPaystubBtn) el.addParsedPaystubBtn.disabled = false;
+
+  setHtml(
+    el.paystubAnalysisResults,
+    `
+      <div class="estimate-results-grid">
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Gross Pay</span>
+          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.gross)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Net Pay</span>
+          <span class="estimate-result-value ${getBalanceStatus(latestParsedPaystub.net)}">${formatCurrency(latestParsedPaystub.net)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Take-Home %</span>
+          <span class="estimate-result-value">${latestParsedPaystub.takeHomePercent.toFixed(1)}%</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Regular / OT Hours</span>
+          <span class="estimate-result-value">${latestParsedPaystub.regularHours.toFixed(2)} / ${latestParsedPaystub.overtimeHours.toFixed(2)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Taxes Found</span>
+          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.taxTotal)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Deductions Found</span>
+          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.deductionTotal)}</span>
+        </div>
+      </div>
+      <div class="planner-chip-row">
+        <span class="planner-chip">${latestParsedPaystub.payDate ? `Pay date ${formatDate(latestParsedPaystub.payDate)}` : "Pay date not detected"}</span>
+        <span class="planner-chip">Effective hourly net ${formatCurrency(latestParsedPaystub.effectiveHourlyNet)}</span>
+        <span class="planner-chip">Effective hourly gross ${formatCurrency(latestParsedPaystub.effectiveHourlyGross)}</span>
+        ${latestParsedPaystub.bonus > 0 ? `<span class="planner-chip">Bonus ${formatCurrency(latestParsedPaystub.bonus)}</span>` : ""}
+      </div>
+    `
+  );
+}
+
+function renderPaystubHistory() {
+  if (el.paystubHistoryList) {
+    if (!paystubHistory.length) {
+      el.paystubHistoryList.innerHTML = '<li class="timeline-empty">No paystubs saved yet. Add a parsed stub to build better paycheck and work-hour estimates.</li>';
+    } else {
+      el.paystubHistoryList.innerHTML = paystubHistory
+        .slice()
+        .sort(function (a, b) {
+          return (b.payDate || b.createdAt || "").localeCompare(a.payDate || a.createdAt || "");
+        })
+        .map(function (entry, index) {
+          return `
+            <li class="bill-item">
+              <div class="bill-main">
+                <div class="bill-top-row">
+                  <div class="bill-title-wrap">
+                    <div class="bill-title-line">
+                      <strong class="bill-title">${entry.payDate ? formatDate(entry.payDate) : `Paystub ${index + 1}`}</strong>
+                      <span class="bill-chip">${formatCurrency(entry.net)} net</span>
+                      <span class="bill-chip bill-chip-soft">${formatCurrency(entry.gross)} gross</span>
+                    </div>
+                    <div class="bill-meta">
+                      <span class="bill-chip bill-chip-soft">${entry.totalHours ? `${entry.totalHours.toFixed(2)} hrs` : "Hours not found"}</span>
+                      <span class="bill-chip bill-chip-soft">${entry.takeHomePercent.toFixed(1)}% keep rate</span>
+                      <span class="bill-chip bill-chip-soft">${formatCurrency(entry.taxTotal)} taxes</span>
+                    </div>
+                  </div>
+                  <div class="bill-actions">
+                    <button type="button" class="secondary-btn delete-btn" data-paystub-delete="${entry.id}">Delete</button>
+                  </div>
+                </div>
+              </div>
+            </li>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  if (!el.paystubHistorySummary) return;
+
+  const estimate = getPaystubHistoryEstimate();
+  if (!estimate) {
+    setHtml(
+      el.paystubHistorySummary,
+      '<p class="timeline-empty">Save at least one paystub to build an average paycheck model from your real taxes, deductions, HSA, local taxes, and 401(k) drag.</p>'
+    );
+    if (el.usePaystubAverageBtn) el.usePaystubAverageBtn.disabled = true;
+    return;
+  }
+
+  if (el.usePaystubAverageBtn) el.usePaystubAverageBtn.disabled = false;
+
+  setHtml(
+    el.paystubHistorySummary,
+    `
+      <div class="estimate-results-grid">
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Paystubs Used</span>
+          <span class="estimate-result-value">${estimate.count}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Average Gross</span>
+          <span class="estimate-result-value">${formatCurrency(estimate.averageGross)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Average Net</span>
+          <span class="estimate-result-value">${formatCurrency(estimate.averageNet)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Average Total Hours</span>
+          <span class="estimate-result-value">${estimate.averageHours.toFixed(2)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Avg Taxes + Withholding</span>
+          <span class="estimate-result-value">${formatCurrency(estimate.averageTaxes)}</span>
+        </div>
+        <div class="estimate-result-card">
+          <span class="estimate-result-label">Avg Deductions</span>
+          <span class="estimate-result-value">${formatCurrency(estimate.averageDeductions)}</span>
+        </div>
+      </div>
+      <div class="planner-callout">
+        <strong>More accurate forecast base</strong>
+        <span>Your paystub history suggests a typical take-home rate of ${estimate.takeHomePercent.toFixed(1)}%, about ${formatCurrency(estimate.averageHourlyNet)} net per hour, and ${estimate.averageOvertimeHours.toFixed(2)} average OT hours.</span>
+      </div>
+    `
+  );
+
+  if (el.paystubHistoryList) {
+    const deleteButtons = el.paystubHistoryList.querySelectorAll("[data-paystub-delete]");
+    deleteButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        const id = this.getAttribute("data-paystub-delete");
+        const index = paystubHistory.findIndex(function (entry) { return entry.id === id; });
+        if (index >= 0) {
+          paystubHistory.splice(index, 1);
+          refreshApp();
+        }
+      });
+    });
+  }
+}
+
+function analyzePaystubDraft() {
+  latestParsedPaystub = parsePaystubText(el.paystubTextInput?.value || "");
+  renderPaystubAnalysis();
+}
+
+function applyPaystubAverageToManualPaycheck() {
+  const estimate = getPaystubHistoryEstimate();
+  if (!estimate || !el.nextPayAmountInput) return;
+  el.nextPayAmountInput.value = round2(estimate.averageNet);
+  refreshApp();
+}
+
+
 function renderHouseholdSplitSummary() {
   if (!el.householdSplitSummary) return;
 
@@ -3931,6 +4421,8 @@ function refreshApp() {
   renderStarterGuide();
   renderPaydayReadinessSummary();
   renderPaycheckAllocationSummary();
+  renderPaystubAnalysis();
+  renderPaystubHistory();
   saveData();
 }
 
@@ -3965,6 +4457,9 @@ function clearBillForm() {
   el.billCategoryInput.value = "other";
   el.billFrequencyInput.value = "one-time";
   el.billPriorityInput.value = "important";
+  if (el.billNotesInput) el.billNotesInput.value = "";
+  if (el.billAutopayInput) el.billAutopayInput.checked = false;
+  if (el.billReminderDaysInput) el.billReminderDaysInput.value = "0";
   exitEditMode();
 }
 
@@ -4129,6 +4624,8 @@ function saveData() {
       extraGoal: el.workExtraGoalInput ? el.workExtraGoalInput.value : "0",
       netRetention: el.workNetRetentionInput ? el.workNetRetentionInput.value : "",
     },
+    paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
+    paystubHistory,
   };
 
   localStorage.setItem(STORAGE_KEYS.app, JSON.stringify(data));
@@ -4183,6 +4680,9 @@ function loadData() {
           category: (data.bills[i].category || "other").toLowerCase().trim(),
           frequency: data.bills[i].frequency || "one-time",
           priority: data.bills[i].priority || "important",
+          notes: data.bills[i].notes || "",
+          autopay: Boolean(data.bills[i].autopay),
+          reminderDays: Math.max(0, safeNumber(data.bills[i].reminderDays)),
           paid: Boolean(data.bills[i].paid),
           lastPaidDate: data.bills[i].lastPaidDate || null,
           createdAt: data.bills[i].createdAt || new Date().toISOString(),
@@ -4230,6 +4730,40 @@ function loadData() {
         });
       }
     }
+
+    paystubHistory.length = 0;
+    if (Array.isArray(data.paystubHistory)) {
+      for (let i = 0; i < data.paystubHistory.length; i++) {
+        const entry = data.paystubHistory[i] || {};
+        paystubHistory.push({
+          id: entry.id || `paystub-${Date.now()}-${i}`,
+          sourceText: entry.sourceText || "",
+          payDate: entry.payDate || "",
+          gross: safeNumber(entry.gross),
+          net: safeNumber(entry.net),
+          regularHours: safeNumber(entry.regularHours),
+          overtimeHours: safeNumber(entry.overtimeHours),
+          totalHours: safeNumber(entry.totalHours),
+          bonus: safeNumber(entry.bonus),
+          federalTax: safeNumber(entry.federalTax),
+          stateTax: safeNumber(entry.stateTax),
+          localTax: safeNumber(entry.localTax),
+          socialSecurity: safeNumber(entry.socialSecurity),
+          medicare: safeNumber(entry.medicare),
+          hsa: safeNumber(entry.hsa),
+          retirement401k: safeNumber(entry.retirement401k),
+          medical: safeNumber(entry.medical),
+          taxTotal: safeNumber(entry.taxTotal),
+          deductionTotal: safeNumber(entry.deductionTotal),
+          takeHomePercent: safeNumber(entry.takeHomePercent),
+          effectiveHourlyNet: safeNumber(entry.effectiveHourlyNet),
+          effectiveHourlyGross: safeNumber(entry.effectiveHourlyGross),
+          createdAt: entry.createdAt || new Date().toISOString(),
+        });
+      }
+    }
+
+    if (el.paystubTextInput) el.paystubTextInput.value = data.paystubDraft ?? "";
 
     el.currentBalanceInput.value = data.currentBalance ?? "";
     el.nextPayDateInput.value = data.nextPayDate ?? "";
@@ -4286,6 +4820,8 @@ function exportData() {
       extraGoal: el.workExtraGoalInput ? el.workExtraGoalInput.value : "0",
       netRetention: el.workNetRetentionInput ? el.workNetRetentionInput.value : "",
     },
+    paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
+    paystubHistory,
   };
 
   const jsonString = JSON.stringify(data, null, 2);
@@ -4297,6 +4833,47 @@ function exportData() {
   link.download = "bill-planner-data-v0.2.0.json";
   link.click();
 
+  URL.revokeObjectURL(url);
+}
+
+
+function exportBillsCsv() {
+  const rows = [
+    ["Name", "Amount", "Due Date", "Category", "Frequency", "Priority", "Auto Pay", "Reminder Days", "Paid", "Notes"]
+  ];
+
+  bills.forEach(function (bill) {
+    rows.push([
+      bill.name || "",
+      round2(bill.amount),
+      bill.dueDate || "",
+      bill.category || "other",
+      bill.frequency || "one-time",
+      bill.priority || "important",
+      bill.autopay ? "Yes" : "No",
+      Math.max(0, Math.round(safeNumber(bill.reminderDays))),
+      bill.paid ? "Yes" : "No",
+      (bill.notes || "").replace(/\r?\n/g, " ")
+    ]);
+  });
+
+  const csv = rows
+    .map(function (row) {
+      return row
+        .map(function (cell) {
+          const safeCell = String(cell ?? "");
+          return `"${safeCell.replace(/"/g, '""')}"`;
+        })
+        .join(",");
+    })
+    .join("\n");
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "bill-planner-bills.csv";
+  link.click();
   URL.revokeObjectURL(url);
 }
 
@@ -4324,6 +4901,9 @@ function importData(file) {
             category: (bill.category || "other").toLowerCase().trim(),
             frequency: bill.frequency || "one-time",
             priority: bill.priority || "important",
+            notes: bill.notes || "",
+            autopay: Boolean(bill.autopay),
+            reminderDays: Math.max(0, safeNumber(bill.reminderDays)),
             paid: Boolean(bill.paid),
           });
         }
@@ -4450,91 +5030,7 @@ function importData(file) {
 ========================= */
 
 function switchTab(tabId) {
-  
-if (el.addDebtBtn) {
-  el.addDebtBtn.addEventListener("click", function () {
-    const name = el.debtNameInput?.value.trim() || "";
-    const balance = safeNumber(el.debtBalanceInput?.value);
-    const apr = safeNumber(el.debtAprInput?.value);
-    const minPayment = safeNumber(el.debtMinPaymentInput?.value);
-    const extraPayment = safeNumber(el.debtExtraPaymentInput?.value);
-    const priority = el.debtPriorityInput?.value || "high-interest";
-
-    if (!name || balance <= 0 || minPayment <= 0) {
-      alert("Enter a debt name, balance, and minimum payment.");
-      return;
-    }
-
-    const debt = {
-      name,
-      balance,
-      apr,
-      minPayment,
-      extraPayment,
-      priority,
-    };
-
-    if (debtEditIndex === null) {
-      debts.push(debt);
-    } else {
-      debts[debtEditIndex] = debt;
-    }
-
-    clearDebtForm();
-    refreshApp();
-  });
-}
-
-if (el.cancelDebtEditBtn) {
-  el.cancelDebtEditBtn.addEventListener("click", clearDebtForm);
-}
-
-if (el.addLifeEventBtn) {
-  el.addLifeEventBtn.addEventListener("click", function () {
-    const name = el.lifeEventNameInput?.value.trim() || "";
-    const type = el.lifeEventTypeInput?.value || "expense";
-    const amount = safeNumber(el.lifeEventAmountInput?.value);
-    const date = el.lifeEventDateInput?.value || "";
-    const funding = el.lifeEventFundingInput?.value || "checking";
-
-    if (!name || amount <= 0 || !date) {
-      alert("Enter a life event name, amount, and date.");
-      return;
-    }
-
-    const event = {
-      name,
-      type,
-      amount,
-      date,
-      funding,
-    };
-
-    if (lifeEventEditIndex === null) {
-      lifeEvents.push(event);
-    } else {
-      lifeEvents[lifeEventEditIndex] = event;
-    }
-
-    clearLifeEventForm();
-    refreshApp();
-  });
-}
-
-if (el.cancelLifeEventEditBtn) {
-  el.cancelLifeEventEditBtn.addEventListener("click", clearLifeEventForm);
-}
-
-bindDashboardInput(el.emergencySavingsBalanceInput);
-bindDashboardInput(el.emergencyFloorInput);
-bindDashboardInput(el.workHourlyRateInput);
-bindDashboardInput(el.workBaseHoursInput);
-bindDashboardInput(el.workOtMultiplierInput);
-bindDashboardInput(el.workTargetBufferInput);
-bindDashboardInput(el.workExtraGoalInput);
-bindDashboardInput(el.workNetRetentionInput);
-
-for (let i = 0; i < el.tabButtons.length; i++) {
+  for (let i = 0; i < el.tabButtons.length; i++) {
     el.tabButtons[i].classList.remove("active");
   }
 
@@ -4587,6 +5083,9 @@ if (el.addBillBtn) {
     const category = el.billCategoryInput.value.toLowerCase().trim();
     const frequency = el.billFrequencyInput.value;
     const priority = el.billPriorityInput.value;
+    const notes = el.billNotesInput ? el.billNotesInput.value.trim() : "";
+    const autopay = Boolean(el.billAutopayInput?.checked);
+    const reminderDays = Math.max(0, Math.round(safeNumber(el.billReminderDaysInput?.value)));
 
     if (name === "" || Number.isNaN(amount) || dueDate === "") {
       alert("Please fill out bill name, amount, and due date.");
@@ -4604,6 +5103,9 @@ if (el.addBillBtn) {
       category,
       frequency,
       priority,
+      notes,
+      autopay,
+      reminderDays,
       paid: existingBill ? Boolean(existingBill.paid) : false,
       lastPaidDate: existingBill ? existingBill.lastPaidDate || null : null,
       createdAt: existingBill ? existingBill.createdAt || nowIso : nowIso,
@@ -4623,6 +5125,10 @@ if (el.addBillBtn) {
 
 if (el.cancelEditBtn) {
   el.cancelEditBtn.addEventListener("click", clearBillForm);
+}
+
+if (el.exportCsvBtn) {
+  el.exportCsvBtn.addEventListener("click", exportBillsCsv);
 }
 
 if (el.resetAppBtn) {
@@ -4849,80 +5355,6 @@ if (el.importFileInput) {
 }
 
 
-if (el.addDebtBtn) {
-  el.addDebtBtn.addEventListener("click", function () {
-    const name = el.debtNameInput?.value.trim() || "";
-    const balance = safeNumber(el.debtBalanceInput?.value);
-    const apr = safeNumber(el.debtAprInput?.value);
-    const minPayment = safeNumber(el.debtMinPaymentInput?.value);
-    const extraPayment = safeNumber(el.debtExtraPaymentInput?.value);
-    const priority = el.debtPriorityInput?.value || "high-interest";
-
-    if (!name || balance <= 0 || minPayment <= 0) {
-      alert("Enter a debt name, balance, and minimum payment.");
-      return;
-    }
-
-    const debt = {
-      name,
-      balance,
-      apr,
-      minPayment,
-      extraPayment,
-      priority,
-    };
-
-    if (debtEditIndex === null) {
-      debts.push(debt);
-    } else {
-      debts[debtEditIndex] = debt;
-    }
-
-    clearDebtForm();
-    refreshApp();
-  });
-}
-
-if (el.cancelDebtEditBtn) {
-  el.cancelDebtEditBtn.addEventListener("click", clearDebtForm);
-}
-
-if (el.addLifeEventBtn) {
-  el.addLifeEventBtn.addEventListener("click", function () {
-    const name = el.lifeEventNameInput?.value.trim() || "";
-    const type = el.lifeEventTypeInput?.value || "expense";
-    const amount = safeNumber(el.lifeEventAmountInput?.value);
-    const date = el.lifeEventDateInput?.value || "";
-    const funding = el.lifeEventFundingInput?.value || "checking";
-
-    if (!name || amount <= 0 || !date) {
-      alert("Enter a life event name, amount, and date.");
-      return;
-    }
-
-    const event = {
-      name,
-      type,
-      amount,
-      date,
-      funding,
-    };
-
-    if (lifeEventEditIndex === null) {
-      lifeEvents.push(event);
-    } else {
-      lifeEvents[lifeEventEditIndex] = event;
-    }
-
-    clearLifeEventForm();
-    refreshApp();
-  });
-}
-
-if (el.cancelLifeEventEditBtn) {
-  el.cancelLifeEventEditBtn.addEventListener("click", clearLifeEventForm);
-}
-
 bindDashboardInput(el.emergencySavingsBalanceInput);
 bindDashboardInput(el.emergencyFloorInput);
 bindDashboardInput(el.workHourlyRateInput);
@@ -4948,6 +5380,47 @@ addEstimatorInputListener(el.paycheck2OtInput);
 addEstimatorInputListener(el.paycheck3GrossInput);
 addEstimatorInputListener(el.paycheck3NetInput);
 addEstimatorInputListener(el.paycheck3OtInput);
+
+if (el.analyzePaystubBtn) {
+  el.analyzePaystubBtn.addEventListener("click", analyzePaystubDraft);
+}
+
+if (el.clearPaystubBtn) {
+  el.clearPaystubBtn.addEventListener("click", function () {
+    latestParsedPaystub = null;
+    if (el.paystubTextInput) el.paystubTextInput.value = "";
+    refreshApp();
+  });
+}
+
+if (el.paystubTextInput) {
+  el.paystubTextInput.addEventListener("input", function () {
+    latestParsedPaystub = null;
+    saveData();
+    renderPaystubAnalysis();
+  });
+}
+
+if (el.addParsedPaystubBtn) {
+  el.addParsedPaystubBtn.addEventListener("click", function () {
+    analyzePaystubDraft();
+    if (!latestParsedPaystub) {
+      alert("Paste paystub text that includes at least gross or net pay.");
+      return;
+    }
+
+    paystubHistory.unshift({
+      ...latestParsedPaystub,
+      id: `paystub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    });
+
+    refreshApp();
+  });
+}
+
+if (el.usePaystubAverageBtn) {
+  el.usePaystubAverageBtn.addEventListener("click", applyPaystubAverageToManualPaycheck);
+}
 
 bindDashboardInput(el.currentBalanceInput);
 bindDashboardInput(el.nextPayDateInput);
@@ -5294,17 +5767,12 @@ if (savedActiveTab && document.getElementById(savedActiveTab)) {
   switchTab("dashboardTab");
 }
 
-/*
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", function () {
     navigator.serviceWorker
       .register("service-worker.js")
-      .then(function () {
-        console.log("Service worker registered successfully.");
-      })
       .catch(function (error) {
         console.error("Service worker registration failed:", error);
       });
   });
 }
-*/

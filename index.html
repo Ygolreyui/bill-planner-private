@@ -471,6 +471,24 @@
             </div>
           </div>
 
+          <div class="form-group bill-form-notes">
+              <label for="billNotes">Notes</label>
+              <textarea id="billNotes" rows="3" placeholder="Optional notes, account details, or context"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="billReminderDays">Reminder Days Before Due Date</label>
+              <input type="number" id="billReminderDays" min="0" step="1" value="0" placeholder="0" />
+            </div>
+
+            <div class="form-group form-group-checkbox">
+              <label class="checkbox-row" for="billAutopay">
+                <input type="checkbox" id="billAutopay" />
+                <span>Auto-pay enabled</span>
+              </label>
+            </div>
+          </div>
+
           <div class="form-buttons">
             <button id="addBillBtn" type="button">Save Bill</button>
             <button id="cancelEditBtn" type="button" class="secondary-btn hidden">Cancel Edit</button>
@@ -947,6 +965,37 @@
               <button id="applyEstimatedPayBtn" type="button">Use Average Net for Next Paycheck</button>
             </div>
           </section>
+
+          <section class="card" id="paystubAnalyzerCard" data-collapsible="true" data-collapse-key="more-paystub-analyzer" data-collapsed="true">
+            <div class="section-heading">
+              <h2>Paystub Analyzer</h2>
+              <span class="section-subtitle">Paste copied paystub text to pull gross pay, net pay, hours, taxes, HSA, local tax, and 401(k)-style deductions into a smarter paycheck model.</span>
+            </div>
+
+            <div class="form-group">
+              <label for="paystubText">Paystub Text</label>
+              <textarea id="paystubText" rows="10" placeholder="Paste paystub text here. Example labels the analyzer understands: Gross Pay, Net Pay, Federal Tax, Township Tax, HSA, 401(k), Regular Hours, Overtime Hours."></textarea>
+            </div>
+
+            <div class="form-buttons">
+              <button id="analyzePaystubBtn" type="button">Analyze Paystub</button>
+              <button id="addParsedPaystubBtn" type="button" class="secondary-btn">Save Parsed Paystub</button>
+              <button id="usePaystubAverageBtn" type="button" class="secondary-btn">Use Paystub Average for Next Paycheck</button>
+              <button id="clearPaystubBtn" type="button" class="secondary-btn">Clear Draft</button>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Latest Paystub Parse</h3>
+              <div id="paystubAnalysisResults"></div>
+            </div>
+
+            <div class="tools-panel">
+              <h3>Paystub History Model</h3>
+              <div id="paystubHistorySummary"></div>
+            </div>
+
+            <ul id="paystubHistoryList" class="planner-list"></ul>
+          </section>
         </div>
 
         <div class="more-side-stack">
@@ -1023,6 +1072,7 @@
 
             <div class="form-buttons">
               <button id="exportDataBtn" type="button">Export Data</button>
+              <button id="exportCsvBtn" type="button" class="secondary-btn">Export Bills CSV</button>
               <button id="importDataBtn" type="button" class="secondary-btn">Import Data</button>
               <button id="resetAppBtn" type="button" class="secondary-btn">Reset All Data</button>
             </div>
