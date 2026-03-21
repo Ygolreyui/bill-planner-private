@@ -1640,15 +1640,13 @@ function renderBuckets() {
     duplicateBtn.className = "secondary-btn";
     duplicateBtn.addEventListener("click", function () {
       const nowIso = new Date().toISOString();
-      const clonedBill = {
-        ...bill,
-        name: `${bill.name} Copy`,
-        paid: false,
-        lastPaidDate: null,
+      const clonedBucket = {
+        ...bucket,
+        name: `${bucket.name} Copy`,
         createdAt: nowIso,
         updatedAt: nowIso,
       };
-      bills.push(clonedBill);
+      spendingBuckets.push(clonedBucket);
       refreshApp();
     });
 
