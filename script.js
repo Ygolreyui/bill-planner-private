@@ -176,6 +176,24 @@ const el = {
   usePaystubAverageBtn: document.getElementById("usePaystubAverageBtn"),
   paystubHistoryList: document.getElementById("paystubHistoryList"),
   paystubHistorySummary: document.getElementById("paystubHistorySummary"),
+
+    automationPlanLabel: document.getElementById("automationPlanLabel"),
+  automationTrialLabel: document.getElementById("automationTrialLabel"),
+  automationPremiumBanner: document.getElementById("automationPremiumBanner"),
+  automationPlanBox: document.getElementById("automationPlanBox"),
+  automationStatusCard: document.getElementById("automationStatusCard"),
+
+  startPremiumTrialBtn: document.getElementById("startPremiumTrialBtn"),
+  togglePremiumBtn: document.getElementById("togglePremiumBtn"),
+  connectBankBtn: document.getElementById("connectBankBtn"),
+
+  loadMockIncomeBtn: document.getElementById("loadMockIncomeBtn"),
+  clearIncomeSuggestionsBtn: document.getElementById("clearIncomeSuggestionsBtn"),
+  incomeImportSuggestions: document.getElementById("incomeImportSuggestions"),
+
+  loadMockBillsBtn: document.getElementById("loadMockBillsBtn"),
+  clearBillSuggestionsBtn: document.getElementById("clearBillSuggestionsBtn"),
+  billImportSuggestions: document.getElementById("billImportSuggestions"),
 };
 
 let categoryChart = null;
@@ -250,6 +268,18 @@ const debts = [];
 const lifeEvents = [];
 const paystubHistory = [];
 
+const incomeImportSuggestions = [];
+const billImportSuggestions = [];
+
+let subscriptionState = {
+  plan: "free",
+  trialStartedAt: "",
+  trialUsed: false,
+  bankSyncEnabled: false,
+  linkedInstitution: "",
+  lastSyncAt: "",
+};
+
 let latestParsedPaystub = null;
 let isProgrammaticPaystubUpdate = false;
 
@@ -282,6 +312,207 @@ function formatCurrency(amount) {
     style: "currency",
     currency: "USD",
   });
+}
+
+function isPremiumEnabled() {
+  return subscriptionState.plan === "premium";
+}
+
+function hasActiveTrial() {
+  if (!subscriptionState.trialStartedAt) return false;
+
+  const started = new Date(subscriptionState.trialStartedAt);
+  if (Number.isNaN(started.getTime())) return false;
+
+  const expires = new Date(started.getTime());
+  expires.setDate(expires.getDate() + 7);
+
+  return Date.now() <= expires.getTime();
+}
+
+function getAutomationAccessEnabled() {
+  return isPremiumEnabled() || hasActiveTrial();
+}
+
+function getTrialDaysRemaining() {
+  if (!hasActiveTrial()) return 0;
+
+  const started = new Date(subscriptionState.trialStartedAt);
+  const expires = new Date(started.getTime());
+  expires.setDate(expires.getDate() + 7);
+
+  const diffMs = expires.getTime() - Date.now();
+  return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+}
+
+function createMockIncomeSuggestions() {
+  return [
+    {
+      id: `income-${Date.now()}-1`,
+      source: "H&K Payroll",
+      description: "ACH CREDIT H&K PAYROLL",
+      amount: 1084.22,
+      payDate: toDateInputString(addDays(getTodayLocal(), -12)),
+      frequency: "biweekly",
+      confidence: 94,
+      imported: false,
+    },
+    {
+      id: `income-${Date.now()}-2`,
+      source: "H&K Payroll",
+      description: "ACH CREDIT H&K PAYROLL",
+      amount: 1162.55,
+      payDate: toDateInputString(addDays(getTodayLocal(), -26)),
+      frequency: "biweekly",
+      confidence: 91,
+      imported: false,
+    },
+    {
+      id: `income-${Date.now()}-3`,
+      source: "Expense Reimbursement",
+      description: "ACH CREDIT REIMBURSEMENT",
+      amount: 60.0,
+      payDate: toDateInputString(addDays(getTodayLocal(), -9)),
+      frequency: "irregular",
+      confidence: 42,
+      imported: false,
+    },
+  ];
+}
+
+function createMockBillSuggestions() {
+  const nextMonth = addMonthsSafe(getTodayLocal(), 1);
+
+  return [
+    {
+      id: `bill-${Date.now()}-1`,
+      name: "GEICO",
+      amount: 146.0,
+      category: "insurance",
+      frequency: "monthly",
+      nextDueDate: toDateInputString(nextMonth),
+      confidence: 92,
+      imported: false,
+      notes: "Detected as recurring insurance payment",
+      autopay: true,
+      reminderDays: 3,
+      priority: "important",
+    },
+    {
+      id: `bill-${Date.now()}-2`,
+      name: "Netflix",
+      amount: 15.49,
+      category: "subscriptions",
+      frequency: "monthly",
+      nextDueDate: toDateInputString(addDays(nextMonth, 2)),
+      confidence: 95,
+      imported: false,
+      notes: "Detected as recurring subscription",
+      autopay: true,
+      reminderDays: 1,
+      priority: "flexible",
+    },
+    {
+      id: `bill-${Date.now()}-3`,
+      name: "Planet Fitness",
+      amount: 10.0,
+      category: "subscriptions",
+      frequency: "monthly",
+      nextDueDate: toDateInputString(addDays(nextMonth, 5)),
+      confidence: 81,
+      imported: false,
+      notes: "Detected as recurring membership",
+      autopay: true,
+      reminderDays: 1,
+      priority: "flexible",
+    },
+  ];
+}
+
+function clearAutomationSuggestions() {
+  incomeImportSuggestions.length = 0;
+  billImportSuggestions.length = 0;
+}
+
+function importIncomeSuggestion(id) {
+  const suggestion = incomeImportSuggestions.find(function (item) {
+    return item.id === id;
+  });
+  if (!suggestion || suggestion.imported) return;
+
+  if (el.nextPayAmountInput) {
+    el.nextPayAmountInput.value = round2(suggestion.amount);
+  }
+
+  if (el.nextPayDateInput && suggestion.payDate) {
+    const parsed = parseLocalDate(suggestion.payDate);
+    const nextDate =
+      suggestion.frequency === "biweekly"
+        ? addDays(parsed || getTodayLocal(), 14)
+        : suggestion.frequency === "weekly"
+          ? addDays(parsed || getTodayLocal(), 7)
+          : addMonthsSafe(parsed || getTodayLocal(), 1);
+
+    el.nextPayDateInput.value = toDateInputString(nextDate);
+  }
+
+  if (
+    el.payFrequencyInput &&
+    ["weekly", "biweekly", "monthly"].includes(suggestion.frequency)
+  ) {
+    el.payFrequencyInput.value = suggestion.frequency;
+  }
+
+  if (el.baseNetPayInput && !safeNumber(el.baseNetPayInput.value)) {
+    el.baseNetPayInput.value = round2(suggestion.amount);
+  }
+
+  suggestion.imported = true;
+  refreshApp();
+}
+
+function importBillSuggestion(id) {
+  const suggestion = billImportSuggestions.find(function (item) {
+    return item.id === id;
+  });
+  if (!suggestion || suggestion.imported) return;
+
+  bills.push({
+    name: suggestion.name,
+    amount: safeNumber(suggestion.amount),
+    dueDate: suggestion.nextDueDate,
+    category: suggestion.category || "other",
+    frequency: suggestion.frequency || "monthly",
+    priority: suggestion.priority || "important",
+    notes: suggestion.notes || "",
+    autopay: Boolean(suggestion.autopay),
+    reminderDays: safeNumber(suggestion.reminderDays),
+    paid: false,
+    lastPaidDate: "",
+  });
+
+  suggestion.imported = true;
+  refreshApp();
+}
+
+function dismissIncomeSuggestion(id) {
+  const index = incomeImportSuggestions.findIndex(function (item) {
+    return item.id === id;
+  });
+  if (index >= 0) {
+    incomeImportSuggestions.splice(index, 1);
+    refreshApp();
+  }
+}
+
+function dismissBillSuggestion(id) {
+  const index = billImportSuggestions.findIndex(function (item) {
+    return item.id === id;
+  });
+  if (index >= 0) {
+    billImportSuggestions.splice(index, 1);
+    refreshApp();
+  }
 }
 
 function parseDisplayNumber(text) {
@@ -1770,6 +2001,168 @@ function renderPieChart(canvas, existingChart, totals) {
 /* =========================
    RENDER FUNCTIONS
 ========================= */
+
+function renderAutomationStatus() {
+  if (!el.automationStatusCard) return;
+
+  const hasAccess = getAutomationAccessEnabled();
+  const planLabel = isPremiumEnabled() ? "Premium" : "Free";
+  const trialText = hasActiveTrial()
+    ? `${getTrialDaysRemaining()} day${getTrialDaysRemaining() === 1 ? "" : "s"} left`
+    : subscriptionState.trialUsed
+      ? "Used"
+      : "Not started";
+
+  if (el.automationPlanLabel) el.automationPlanLabel.textContent = planLabel;
+  if (el.automationTrialLabel) el.automationTrialLabel.textContent = trialText;
+
+  el.automationStatusCard.className = `automation-status-card ${hasAccess ? "is-premium" : "is-locked"}`;
+
+  if (hasAccess) {
+    setHtml(
+      el.automationStatusCard,
+      `
+        <strong>Automation is unlocked.</strong>
+        <div class="automation-note">
+          Right now this uses mock detected transactions so we can finish the workflow before wiring in a real bank connection.
+        </div>
+      `,
+    );
+  } else {
+    setHtml(
+      el.automationStatusCard,
+      `
+        <strong>Automation is locked on the free plan.</strong>
+        <div class="automation-note">
+          Free users can still use the full manual planner. Premium only adds automation and convenience.
+        </div>
+      `,
+    );
+  }
+
+  if (el.togglePremiumBtn) {
+    el.togglePremiumBtn.textContent = isPremiumEnabled()
+      ? "Switch to Free"
+      : "Switch to Premium";
+  }
+}
+
+function renderIncomeImportSuggestions() {
+  if (!el.incomeImportSuggestions) return;
+
+  if (!incomeImportSuggestions.length) {
+    setHtml(
+      el.incomeImportSuggestions,
+      `<div class="automation-empty">No detected income yet. Tap <strong>Load Mock Income</strong> to test the flow.</div>`,
+    );
+    return;
+  }
+
+  el.incomeImportSuggestions.innerHTML = incomeImportSuggestions
+    .map(function (item) {
+      return `
+        <div class="automation-suggestion-item">
+          <div class="automation-suggestion-top">
+            <div>
+              <div class="automation-suggestion-title">${escapeHtml(item.source)}</div>
+              <div class="automation-suggestion-subtitle">${escapeHtml(item.description)} • ${formatDate(item.payDate)}</div>
+            </div>
+            <span class="automation-suggestion-badge">${item.confidence}% confidence</span>
+          </div>
+
+          <div class="automation-chip-row">
+            <span class="automation-chip">${formatCurrency(item.amount)}</span>
+            <span class="automation-chip">${formatCategory(item.frequency)}</span>
+            <span class="automation-chip">${item.imported ? "Imported" : "Pending review"}</span>
+          </div>
+
+          <div class="automation-actions">
+            <button type="button" data-import-income="${item.id}" ${item.imported ? "disabled" : ""}>
+              ${item.imported ? "Imported" : "Use as Paycheck"}
+            </button>
+            <button type="button" class="secondary-btn" data-dismiss-income="${item.id}">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const importButtons = el.incomeImportSuggestions.querySelectorAll("[data-import-income]");
+  const dismissButtons = el.incomeImportSuggestions.querySelectorAll("[data-dismiss-income]");
+
+  importButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      importIncomeSuggestion(this.getAttribute("data-import-income"));
+    });
+  });
+
+  dismissButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      dismissIncomeSuggestion(this.getAttribute("data-dismiss-income"));
+    });
+  });
+}
+
+function renderBillImportSuggestions() {
+  if (!el.billImportSuggestions) return;
+
+  if (!billImportSuggestions.length) {
+    setHtml(
+      el.billImportSuggestions,
+      `<div class="automation-empty">No recurring bills detected yet. Tap <strong>Load Mock Bills</strong> to test the import workflow.</div>`,
+    );
+    return;
+  }
+
+  el.billImportSuggestions.innerHTML = billImportSuggestions
+    .map(function (item) {
+      return `
+        <div class="automation-suggestion-item">
+          <div class="automation-suggestion-top">
+            <div>
+              <div class="automation-suggestion-title">${escapeHtml(item.name)}</div>
+              <div class="automation-suggestion-subtitle">${escapeHtml(item.notes || "")}</div>
+            </div>
+            <span class="automation-suggestion-badge">${item.confidence}% confidence</span>
+          </div>
+
+          <div class="automation-chip-row">
+            <span class="automation-chip">${formatCurrency(item.amount)}</span>
+            <span class="automation-chip">${formatCategory(item.frequency)}</span>
+            <span class="automation-chip">Due ${formatDate(item.nextDueDate)}</span>
+            <span class="automation-chip">${formatCategory(item.category)}</span>
+          </div>
+
+          <div class="automation-actions">
+            <button type="button" data-import-bill="${item.id}" ${item.imported ? "disabled" : ""}>
+              ${item.imported ? "Added to Bills" : "Add to Bills"}
+            </button>
+            <button type="button" class="secondary-btn" data-dismiss-bill="${item.id}">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  const importButtons = el.billImportSuggestions.querySelectorAll("[data-import-bill]");
+  const dismissButtons = el.billImportSuggestions.querySelectorAll("[data-dismiss-bill]");
+
+  importButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      importBillSuggestion(this.getAttribute("data-import-bill"));
+    });
+  });
+
+  dismissButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      dismissBillSuggestion(this.getAttribute("data-dismiss-bill"));
+    });
+  });
+}
 
 function renderForecastPaySourceMessage() {
   const detail = getForecastPaySourceDetails();
@@ -5868,6 +6261,9 @@ function refreshApp() {
   renderPaycheckAllocationSummary();
   renderPaystubAnalysis();
   renderPaystubHistory();
+  renderAutomationStatus();
+  renderIncomeImportSuggestions();
+  renderBillImportSuggestions();
   saveData();
 }
 
@@ -6110,6 +6506,9 @@ function saveData() {
     },
     paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
     paystubHistory,
+    subscriptionState,
+    incomeImportSuggestions,
+    billImportSuggestions,
   };
 
   localStorage.setItem(STORAGE_KEYS.app, JSON.stringify(data));
@@ -6155,6 +6554,55 @@ function loadData() {
         input.checked = data.sharedCategories.includes(
           (input.dataset.category || "other").toLowerCase().trim(),
         );
+      });
+    }
+
+    if (data.subscriptionState && typeof data.subscriptionState === "object") {
+      subscriptionState = {
+        plan: data.subscriptionState.plan === "premium" ? "premium" : "free",
+        trialStartedAt: data.subscriptionState.trialStartedAt || "",
+        trialUsed: Boolean(data.subscriptionState.trialUsed),
+        bankSyncEnabled: Boolean(data.subscriptionState.bankSyncEnabled),
+        linkedInstitution: data.subscriptionState.linkedInstitution || "",
+        lastSyncAt: data.subscriptionState.lastSyncAt || "",
+      };
+    }
+
+    incomeImportSuggestions.length = 0;
+    if (Array.isArray(data.incomeImportSuggestions)) {
+      data.incomeImportSuggestions.forEach(function (item) {
+        if (!item || !item.id) return;
+        incomeImportSuggestions.push({
+          id: item.id,
+          source: item.source || "Unknown source",
+          description: item.description || "",
+          amount: safeNumber(item.amount),
+          payDate: item.payDate || "",
+          frequency: item.frequency || "biweekly",
+          confidence: safeNumber(item.confidence),
+          imported: Boolean(item.imported),
+        });
+      });
+    }
+
+    billImportSuggestions.length = 0;
+    if (Array.isArray(data.billImportSuggestions)) {
+      data.billImportSuggestions.forEach(function (item) {
+        if (!item || !item.id) return;
+        billImportSuggestions.push({
+          id: item.id,
+          name: item.name || "Unnamed bill",
+          amount: safeNumber(item.amount),
+          category: item.category || "other",
+          frequency: item.frequency || "monthly",
+          nextDueDate: item.nextDueDate || "",
+          confidence: safeNumber(item.confidence),
+          imported: Boolean(item.imported),
+          notes: item.notes || "",
+          autopay: Boolean(item.autopay),
+          reminderDays: safeNumber(item.reminderDays),
+          priority: item.priority || "important",
+        });
       });
     }
 
@@ -7017,6 +7465,92 @@ if (el.usePaystubAverageBtn) {
     "click",
     applyPaystubAverageToManualPaycheck,
   );
+}
+
+if (el.startPremiumTrialBtn) {
+  el.startPremiumTrialBtn.addEventListener("click", function () {
+    if (hasActiveTrial()) {
+      alert("Your 7-day trial is already active.");
+      return;
+    }
+
+    if (subscriptionState.trialUsed) {
+      alert("Your free trial has already been used.");
+      return;
+    }
+
+    subscriptionState.trialStartedAt = new Date().toISOString();
+    subscriptionState.trialUsed = true;
+    refreshApp();
+  });
+}
+
+if (el.togglePremiumBtn) {
+  el.togglePremiumBtn.addEventListener("click", function () {
+    subscriptionState.plan =
+      subscriptionState.plan === "premium" ? "free" : "premium";
+    refreshApp();
+  });
+}
+
+if (el.connectBankBtn) {
+  el.connectBankBtn.addEventListener("click", function () {
+    if (!getAutomationAccessEnabled()) {
+      alert("Bank automation is part of Premium. For now, start the trial or switch Premium on to test the workflow.");
+      return;
+    }
+
+    subscriptionState.bankSyncEnabled = true;
+    subscriptionState.linkedInstitution = "Mock Checking";
+    subscriptionState.lastSyncAt = new Date().toISOString();
+    refreshApp();
+  });
+}
+
+if (el.loadMockIncomeBtn) {
+  el.loadMockIncomeBtn.addEventListener("click", function () {
+    if (!getAutomationAccessEnabled()) {
+      alert("Automation is locked on the free plan.");
+      return;
+    }
+
+    incomeImportSuggestions.length = 0;
+    createMockIncomeSuggestions().forEach(function (item) {
+      incomeImportSuggestions.push(item);
+    });
+
+    refreshApp();
+  });
+}
+
+if (el.clearIncomeSuggestionsBtn) {
+  el.clearIncomeSuggestionsBtn.addEventListener("click", function () {
+    incomeImportSuggestions.length = 0;
+    refreshApp();
+  });
+}
+
+if (el.loadMockBillsBtn) {
+  el.loadMockBillsBtn.addEventListener("click", function () {
+    if (!getAutomationAccessEnabled()) {
+      alert("Automation is locked on the free plan.");
+      return;
+    }
+
+    billImportSuggestions.length = 0;
+    createMockBillSuggestions().forEach(function (item) {
+      billImportSuggestions.push(item);
+    });
+
+    refreshApp();
+  });
+}
+
+if (el.clearBillSuggestionsBtn) {
+  el.clearBillSuggestionsBtn.addEventListener("click", function () {
+    billImportSuggestions.length = 0;
+    refreshApp();
+  });
 }
 
 if (el.hoursForecastRegularInput) {

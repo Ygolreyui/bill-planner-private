@@ -641,6 +641,7 @@
 
       <section class="tool-rail-card">
         <div class="tool-rail">
+          <a href="#automationCard" class="tool-chip">Automation</a>
           <a href="#incomePlanningCard" class="tool-chip">Income</a>
           <a href="#sharedSplitCard" class="tool-chip">Shared Split</a>
           <a href="#debtStrategyCard" class="tool-chip">Debt</a>
@@ -656,6 +657,68 @@
       </section>
       <section class="more-top-layout">
         <div class="more-main-stack">
+      <section class="card more-feature-card" id="automationCard" data-collapsible="true" data-collapse-key="more-automation" data-collapsed="false">
+            <div class="section-heading">
+              <h2>Automatic Import</h2>
+              <span class="section-subtitle">Detect paychecks and recurring bills automatically, then approve what should be added to your plan</span>
+            </div>
+
+            <div class="automation-premium-banner" id="automationPremiumBanner">
+              <div class="automation-premium-copy">
+                <p class="mini-eyebrow">Automation</p>
+                <h3>Make this automatic</h3>
+                <p>
+                  Connect your bank later to detect paychecks and recurring bills automatically.
+                  For now, this mock version lets us build and test the workflow inside your current app.
+                </p>
+              </div>
+
+              <div class="automation-plan-box" id="automationPlanBox">
+                <div class="automation-plan-row">
+                  <span>Plan</span>
+                  <strong id="automationPlanLabel">Free</strong>
+                </div>
+                <div class="automation-plan-row">
+                  <span>Trial</span>
+                  <strong id="automationTrialLabel">Not started</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-buttons">
+              <button id="startPremiumTrialBtn" type="button">Start 7-Day Trial</button>
+              <button id="togglePremiumBtn" type="button" class="secondary-btn">Switch to Premium</button>
+              <button id="connectBankBtn" type="button" class="secondary-btn">Connect Bank</button>
+            </div>
+
+            <div class="automation-status-card" id="automationStatusCard"></div>
+
+            <div class="automation-tools-grid">
+              <section class="tools-panel">
+                <h3>Income Detection</h3>
+                <p class="automation-panel-copy">
+                  Simulate detected paychecks first, then import only the ones you approve.
+                </p>
+                <div class="form-buttons">
+                  <button id="loadMockIncomeBtn" type="button">Load Mock Income</button>
+                  <button id="clearIncomeSuggestionsBtn" type="button" class="secondary-btn">Clear</button>
+                </div>
+                <div id="incomeImportSuggestions" class="automation-suggestion-list"></div>
+              </section>
+
+              <section class="tools-panel">
+                <h3>Recurring Bill Detection</h3>
+                <p class="automation-panel-copy">
+                  Simulate recurring bills and subscriptions, then add them into your existing Bills list.
+                </p>
+                <div class="form-buttons">
+                  <button id="loadMockBillsBtn" type="button">Load Mock Bills</button>
+                  <button id="clearBillSuggestionsBtn" type="button" class="secondary-btn">Clear</button>
+                </div>
+                <div id="billImportSuggestions" class="automation-suggestion-list"></div>
+              </section>
+            </div>
+          </section>
           <section class="card more-feature-card" id="incomePlanningCard" data-collapsible="true" data-collapse-key="more-income" data-collapsed="false">
             <div class="section-heading">
               <h2>Income Planning</h2>
