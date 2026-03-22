@@ -177,22 +177,31 @@ const el = {
   paystubHistoryList: document.getElementById("paystubHistoryList"),
   paystubHistorySummary: document.getElementById("paystubHistorySummary"),
 
-    automationPlanLabel: document.getElementById("automationPlanLabel"),
+  automationPlanLabel: document.getElementById("automationPlanLabel"),
   automationTrialLabel: document.getElementById("automationTrialLabel"),
   automationPremiumBanner: document.getElementById("automationPremiumBanner"),
   automationPlanBox: document.getElementById("automationPlanBox"),
   automationStatusCard: document.getElementById("automationStatusCard"),
+  automationActivitySummary: document.getElementById("automationActivitySummary"),
+  forecastSourceStatusInline: document.getElementById("forecastSourceStatusInline"),
+  incomeSourceControlSummary: document.getElementById("incomeSourceControlSummary"),
 
   startPremiumTrialBtn: document.getElementById("startPremiumTrialBtn"),
   togglePremiumBtn: document.getElementById("togglePremiumBtn"),
   connectBankBtn: document.getElementById("connectBankBtn"),
+  useImportedForecastBtn: document.getElementById("useImportedForecastBtn"),
+  revertForecastToManualBtn: document.getElementById("revertForecastToManualBtn"),
 
   loadMockIncomeBtn: document.getElementById("loadMockIncomeBtn"),
-  clearIncomeSuggestionsBtn: document.getElementById("clearIncomeSuggestionsBtn"),
+  clearIncomeSuggestionsBtn: document.getElementById(
+    "clearIncomeSuggestionsBtn",
+  ),
   incomeImportSuggestions: document.getElementById("incomeImportSuggestions"),
 
   loadMockBillsBtn: document.getElementById("loadMockBillsBtn"),
-  clearBillSuggestionsBtn: document.getElementById("clearBillSuggestionsBtn"),
+  clearBillSuggestionsBtn: document.getElementById(
+    "clearBillSuggestionsBtn",
+  ),
   billImportSuggestions: document.getElementById("billImportSuggestions"),
 };
 
@@ -270,6 +279,15 @@ const paystubHistory = [];
 
 const incomeImportSuggestions = [];
 const billImportSuggestions = [];
+const transactions = [];
+
+let automationScanState = {
+  lastScanAt: "",
+  transactionCount: 0,
+  incomeCandidateCount: 0,
+  billCandidateCount: 0,
+  loadedMockSet: false,
+};
 
 let subscriptionState = {
   plan: "free",
@@ -278,6 +296,18 @@ let subscriptionState = {
   bankSyncEnabled: false,
   linkedInstitution: "",
   lastSyncAt: "",
+};
+
+let forecastIncomeSource = {
+  mode: "manual",
+  importedSuggestionId: "",
+  importedSourceName: "",
+  importedAmount: 0,
+  importedPayDate: "",
+  importedNextPayDate: "",
+  importedFrequency: "biweekly",
+  updatedAt: "",
+  reason: "",
 };
 
 let latestParsedPaystub = null;
@@ -345,93 +375,599 @@ function getTrialDaysRemaining() {
   return Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 }
 
-function createMockIncomeSuggestions() {
-  return [
-    {
-      id: `income-${Date.now()}-1`,
-      source: "H&K Payroll",
-      description: "ACH CREDIT H&K PAYROLL",
-      amount: 1084.22,
-      payDate: toDateInputString(addDays(getTodayLocal(), -12)),
-      frequency: "biweekly",
-      confidence: 94,
-      imported: false,
-    },
-    {
-      id: `income-${Date.now()}-2`,
-      source: "H&K Payroll",
-      description: "ACH CREDIT H&K PAYROLL",
-      amount: 1162.55,
-      payDate: toDateInputString(addDays(getTodayLocal(), -26)),
-      frequency: "biweekly",
-      confidence: 91,
-      imported: false,
-    },
-    {
-      id: `income-${Date.now()}-3`,
-      source: "Expense Reimbursement",
-      description: "ACH CREDIT REIMBURSEMENT",
-      amount: 60.0,
-      payDate: toDateInputString(addDays(getTodayLocal(), -9)),
-      frequency: "irregular",
-      confidence: 42,
-      imported: false,
-    },
+function getDefaultForecastIncomeSource() {
+  return {
+    mode: "manual",
+    importedSuggestionId: "",
+    importedSourceName: "",
+    importedAmount: 0,
+    importedPayDate: "",
+    importedNextPayDate: "",
+    importedFrequency: "biweekly",
+    updatedAt: "",
+    reason: "",
+  };
+}
+
+function normalizeForecastIncomeSource(data) {
+  const fallback = getDefaultForecastIncomeSource();
+  if (!data || typeof data !== "object") return fallback;
+
+  const allowedModes = new Set([
+    "manual",
+    "imported",
+    "scenario-manual",
+    "scenario-imported",
+  ]);
+
+  return {
+    mode: allowedModes.has(data.mode) ? data.mode : fallback.mode,
+    importedSuggestionId: data.importedSuggestionId || "",
+    importedSourceName: data.importedSourceName || "",
+    importedAmount: round2(data.importedAmount),
+    importedPayDate: data.importedPayDate || "",
+    importedNextPayDate: data.importedNextPayDate || "",
+    importedFrequency: data.importedFrequency || "biweekly",
+    updatedAt: data.updatedAt || "",
+    reason: data.reason || "",
+  };
+}
+
+function hasImportedForecastIncome() {
+  return safeNumber(forecastIncomeSource.importedAmount) > 0;
+}
+
+function isImportedForecastMode() {
+  return ["imported", "scenario-imported"].includes(
+    forecastIncomeSource.mode,
+  );
+}
+
+function setForecastIncomeSource(nextState) {
+  forecastIncomeSource = normalizeForecastIncomeSource({
+    ...forecastIncomeSource,
+    ...nextState,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+function setForecastIncomeSourceFromImportedSuggestion(suggestion, details) {
+  const importedFrequency =
+    details?.frequency ||
+    (["weekly", "biweekly", "monthly"].includes(suggestion?.frequency)
+      ? suggestion.frequency
+      : "biweekly");
+
+  setForecastIncomeSource({
+    mode: "imported",
+    importedSuggestionId: suggestion?.id || "",
+    importedSourceName: suggestion?.source || "Imported paycheck",
+    importedAmount: round2(details?.amount ?? suggestion?.amount),
+    importedPayDate: suggestion?.payDate || "",
+    importedNextPayDate: details?.nextPayDate || "",
+    importedFrequency,
+    reason: "imported-paycheck",
+  });
+}
+
+function markForecastSourceManual(reason) {
+  setForecastIncomeSource({
+    mode: "manual",
+    reason: reason || "manual-edit",
+  });
+}
+
+function markForecastSourceScenario(reason) {
+  setForecastIncomeSource({
+    mode: hasImportedForecastIncome() ? "scenario-imported" : "scenario-manual",
+    reason: reason || "scenario",
+  });
+}
+
+function syncForecastSourceWithSelection(reason) {
+  const useScenario = el.useIncomeScenarioForForecastInput?.value === "scenario";
+
+  if (useScenario) {
+    markForecastSourceScenario(reason || "scenario-selection");
+    return;
+  }
+
+  if (isImportedForecastMode() && hasImportedForecastIncome()) {
+    setForecastIncomeSource({
+      mode: "imported",
+      reason: reason || "imported-selection",
+    });
+    return;
+  }
+
+  markForecastSourceManual(reason || "manual-selection");
+}
+
+function getForecastSourceDisplayLabel() {
+  const sourceName = forecastIncomeSource.importedSourceName || "Imported paycheck";
+
+  if (forecastIncomeSource.mode === "imported") {
+    return `Imported Paycheck (${sourceName})`;
+  }
+  if (forecastIncomeSource.mode === "scenario-imported") {
+    return "Income Scenario (Imported Baseline)";
+  }
+  if (forecastIncomeSource.mode === "scenario-manual") {
+    return "Income Scenario (Manual Baseline)";
+  }
+  return "Manual Next Paycheck Amount";
+}
+
+function getForecastSourceReasonLabel() {
+  const reason = forecastIncomeSource.reason || "";
+  if (reason === "imported-paycheck") return "Imported from automation";
+  if (reason === "manual-edit" || reason === "manual-override") return "Manual entry took control";
+  if (reason === "forecast-source-select") return "Forecast source manually selected";
+  if (reason === "apply-income-scenario") return "Scenario applied to forecast";
+  if (reason === "hours-forecast-applied") return "Hours forecast applied";
+  if (reason === "hours-forecast-scenario-copy") return "Hours forecast copied into scenario";
+  if (reason === "revert-manual") return "Reverted to manual forecast";
+  if (reason === "activate-imported") return "Imported forecast re-activated";
+  return "Current active source";
+}
+
+function getImportedForecastNextPayDate() {
+  if (forecastIncomeSource.importedNextPayDate) {
+    return forecastIncomeSource.importedNextPayDate;
+  }
+  const suggestion = incomeImportSuggestions.find(function (item) {
+    return item.id === forecastIncomeSource.importedSuggestionId;
+  });
+  if (!suggestion || !suggestion.payDate) return "";
+  const parsed = parseLocalDate(suggestion.payDate);
+  if (!parsed) return "";
+  const frequency = ["weekly", "biweekly", "monthly"].includes(
+    forecastIncomeSource.importedFrequency,
+  )
+    ? forecastIncomeSource.importedFrequency
+    : "biweekly";
+  const nextDate =
+    frequency === "weekly"
+      ? addDays(parsed, 7)
+      : frequency === "monthly"
+        ? addMonthsSafe(parsed, 1)
+        : addDays(parsed, 14);
+  return toDateInputString(nextDate);
+}
+
+function activateImportedForecastSource() {
+  if (!hasImportedForecastIncome()) return false;
+
+  const amount = round2(forecastIncomeSource.importedAmount);
+  const nextPayDate = getImportedForecastNextPayDate();
+  const frequency = ["weekly", "biweekly", "monthly"].includes(
+    forecastIncomeSource.importedFrequency,
+  )
+    ? forecastIncomeSource.importedFrequency
+    : "biweekly";
+
+  if (el.nextPayAmountInput) el.nextPayAmountInput.value = amount.toFixed(2);
+  if (el.nextPayDateInput && nextPayDate) el.nextPayDateInput.value = nextPayDate;
+  if (el.payFrequencyInput) el.payFrequencyInput.value = frequency;
+  if (el.baseNetPayInput) el.baseNetPayInput.value = amount.toFixed(2);
+  if (el.expectedOtNetInput) el.expectedOtNetInput.value = "0.00";
+  if (el.useIncomeScenarioForForecastInput) {
+    el.useIncomeScenarioForForecastInput.value = "manual";
+  }
+
+  setForecastIncomeSource({
+    mode: "imported",
+    reason: "activate-imported",
+    importedAmount: amount,
+    importedNextPayDate: nextPayDate,
+    importedFrequency: frequency,
+  });
+  refreshIncomePlanning();
+  refreshApp();
+  return true;
+}
+
+function revertForecastSourceToManual() {
+  if (el.useIncomeScenarioForForecastInput) {
+    el.useIncomeScenarioForForecastInput.value = "manual";
+  }
+  markForecastSourceManual("revert-manual");
+  refreshIncomePlanning();
+  refreshApp();
+}
+
+function normalizeTransaction(record) {
+  if (!record || typeof record !== "object") return null;
+
+  const amount = round2(record.amount);
+  const name = String(record.name || "").trim();
+  const date = record.date || "";
+  if (!name || !date || !amount) return null;
+
+  return {
+    id:
+      record.id ||
+      `tx-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    amount,
+    date,
+    type: record.type || (amount > 0 ? "deposit" : "expense"),
+    source: record.source || "mock-transactions",
+    category: (record.category || detectCategoryFromTransactionName(name))
+      .toLowerCase()
+      .trim(),
+    notes: record.notes || "",
+  };
+}
+
+function detectCategoryFromTransactionName(name) {
+  const normalized = String(name || "").toLowerCase();
+
+  if (normalized.includes("geico") || normalized.includes("insurance")) {
+    return "insurance";
+  }
+  if (
+    normalized.includes("netflix") ||
+    normalized.includes("spotify") ||
+    normalized.includes("planet fitness") ||
+    normalized.includes("gym")
+  ) {
+    return "subscriptions";
+  }
+  if (
+    normalized.includes("rent") ||
+    normalized.includes("mortgage") ||
+    normalized.includes("landlord")
+  ) {
+    return "housing";
+  }
+  if (
+    normalized.includes("electric") ||
+    normalized.includes("water") ||
+    normalized.includes("comcast") ||
+    normalized.includes("verizon")
+  ) {
+    return "utilities";
+  }
+  if (
+    normalized.includes("uber") ||
+    normalized.includes("shell") ||
+    normalized.includes("sunoco") ||
+    normalized.includes("gas")
+  ) {
+    return "transportation";
+  }
+  if (
+    normalized.includes("walmart") ||
+    normalized.includes("giant") ||
+    normalized.includes("aldi") ||
+    normalized.includes("acme")
+  ) {
+    return "food";
+  }
+  if (
+    normalized.includes("payroll") ||
+    normalized.includes("direct deposit") ||
+    normalized.includes("ach credit")
+  ) {
+    return "income";
+  }
+
+  return "other";
+}
+
+function getTransactionNameKey(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getTransactionDateObject(transaction) {
+  return parseLocalDate(transaction?.date || "");
+}
+
+function sortTransactionsByDateAsc(items) {
+  return items.slice().sort(function (a, b) {
+    const aDate = getTransactionDateObject(a);
+    const bDate = getTransactionDateObject(b);
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate - bDate;
+  });
+}
+
+function getTransactionsSorted() {
+  return sortTransactionsByDateAsc(transactions);
+}
+
+function inferRecurringFrequency(sortedGroup) {
+  if (!Array.isArray(sortedGroup) || sortedGroup.length < 2) {
+    return "irregular";
+  }
+
+  const diffs = [];
+  for (let i = 1; i < sortedGroup.length; i++) {
+    const prev = getTransactionDateObject(sortedGroup[i - 1]);
+    const next = getTransactionDateObject(sortedGroup[i]);
+    if (!prev || !next) continue;
+    const days = Math.abs(
+      Math.round((next.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+    if (days > 0) diffs.push(days);
+  }
+
+  if (!diffs.length) return "irregular";
+
+  const averageDiff =
+    diffs.reduce(function (sum, value) {
+      return sum + value;
+    }, 0) / diffs.length;
+
+  if (averageDiff >= 5 && averageDiff <= 10) return "weekly";
+  if (averageDiff >= 11 && averageDiff <= 18) return "biweekly";
+  if (averageDiff >= 24 && averageDiff <= 37) return "monthly";
+  return "irregular";
+}
+
+function getRecurringConfidence(sortedGroup) {
+  if (!Array.isArray(sortedGroup) || !sortedGroup.length) return 0;
+  if (sortedGroup.length === 1) return 35;
+
+  const amounts = sortedGroup.map(function (item) {
+    return Math.abs(safeNumber(item.amount));
+  });
+  const averageAmount =
+    amounts.reduce(function (sum, value) {
+      return sum + value;
+    }, 0) / amounts.length;
+  const maxDelta = amounts.reduce(function (max, value) {
+    return Math.max(max, Math.abs(value - averageAmount));
+  }, 0);
+  const varianceRatio = averageAmount > 0 ? maxDelta / averageAmount : 1;
+  const stabilityScore =
+    varianceRatio <= 0.03
+      ? 28
+      : varianceRatio <= 0.08
+        ? 20
+        : varianceRatio <= 0.16
+          ? 12
+          : 4;
+  const cadence = inferRecurringFrequency(sortedGroup);
+  const cadenceScore =
+    cadence === "biweekly" || cadence === "monthly"
+      ? 34
+      : cadence === "weekly"
+        ? 28
+        : 10;
+  const countScore = Math.min(30, sortedGroup.length * 9);
+
+  return Math.max(35, Math.min(97, Math.round(stabilityScore + cadenceScore + countScore)));
+}
+
+function createMockTransactions() {
+  const today = getTodayLocal();
+  const rows = [
+    { name: "H&K Payroll", amount: 1084.22, date: toDateInputString(addDays(today, -14)), type: "deposit" },
+    { name: "H&K Payroll", amount: 1162.55, date: toDateInputString(addDays(today, -28)), type: "deposit" },
+    { name: "H&K Payroll", amount: 1098.14, date: toDateInputString(addDays(today, -42)), type: "deposit" },
+    { name: "Expense Reimbursement", amount: 60.0, date: toDateInputString(addDays(today, -9)), type: "deposit" },
+    { name: "GEICO", amount: -146.0, date: toDateInputString(addDays(today, -6)), type: "expense" },
+    { name: "GEICO", amount: -146.0, date: toDateInputString(addDays(today, -36)), type: "expense" },
+    { name: "GEICO", amount: -146.0, date: toDateInputString(addDays(today, -66)), type: "expense" },
+    { name: "Netflix", amount: -15.49, date: toDateInputString(addDays(today, -11)), type: "expense" },
+    { name: "Netflix", amount: -15.49, date: toDateInputString(addDays(today, -41)), type: "expense" },
+    { name: "Netflix", amount: -15.49, date: toDateInputString(addDays(today, -71)), type: "expense" },
+    { name: "Planet Fitness", amount: -10.0, date: toDateInputString(addDays(today, -4)), type: "expense" },
+    { name: "Planet Fitness", amount: -10.0, date: toDateInputString(addDays(today, -34)), type: "expense" },
+    { name: "Planet Fitness", amount: -10.0, date: toDateInputString(addDays(today, -64)), type: "expense" },
+    { name: "Walmart", amount: -83.24, date: toDateInputString(addDays(today, -3)), type: "expense" },
+    { name: "Shell", amount: -48.16, date: toDateInputString(addDays(today, -2)), type: "expense" },
   ];
+
+  return rows
+    .map(function (row, index) {
+      return normalizeTransaction({
+        id: `tx-mock-${Date.now()}-${index + 1}`,
+        source: "mock-transactions",
+        ...row,
+      });
+    })
+    .filter(Boolean);
+}
+
+function scanTransactionsForIncome() {
+  incomeImportSuggestions.length = 0;
+
+  const deposits = transactions.filter(function (transaction) {
+    return safeNumber(transaction.amount) > 0;
+  });
+
+  const grouped = {};
+  deposits.forEach(function (transaction) {
+    const key = getTransactionNameKey(transaction.name);
+    if (!key) return;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(transaction);
+  });
+
+  Object.keys(grouped).forEach(function (key) {
+    const group = sortTransactionsByDateAsc(grouped[key]);
+    if (group.length < 2) return;
+
+    const averageAmount = round2(
+      group.reduce(function (sum, item) {
+        return sum + safeNumber(item.amount);
+      }, 0) / group.length,
+    );
+    const last = group[group.length - 1];
+    const frequency = inferRecurringFrequency(group);
+    const confidence = getRecurringConfidence(group);
+
+    incomeImportSuggestions.push({
+      id: `income-${Date.now()}-${key}`,
+      source: last.name,
+      description: `Detected from ${group.length} similar deposits`,
+      amount: averageAmount,
+      payDate: last.date,
+      frequency:
+        frequency === "monthly"
+          ? "monthly"
+          : frequency === "weekly"
+            ? "weekly"
+            : "biweekly",
+      confidence,
+      imported: false,
+      matchedTransactionIds: group.map(function (item) {
+        return item.id;
+      }),
+    });
+  });
+
+  incomeImportSuggestions.sort(function (a, b) {
+    return b.confidence - a.confidence || b.amount - a.amount;
+  });
+
+  automationScanState.incomeCandidateCount = incomeImportSuggestions.length;
+}
+
+function scanTransactionsForBills() {
+  billImportSuggestions.length = 0;
+
+  const expenses = transactions.filter(function (transaction) {
+    return safeNumber(transaction.amount) < 0;
+  });
+
+  const grouped = {};
+  expenses.forEach(function (transaction) {
+    const key = getTransactionNameKey(transaction.name);
+    if (!key) return;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(transaction);
+  });
+
+  Object.keys(grouped).forEach(function (key) {
+    const group = sortTransactionsByDateAsc(grouped[key]);
+    if (group.length < 2) return;
+
+    const averageAmount = round2(
+      Math.abs(
+        group.reduce(function (sum, item) {
+          return sum + safeNumber(item.amount);
+        }, 0) / group.length,
+      ),
+    );
+    const last = group[group.length - 1];
+    const frequency = inferRecurringFrequency(group);
+    const confidence = getRecurringConfidence(group);
+    const nextDueBase = getTransactionDateObject(last) || getTodayLocal();
+    const category = detectCategoryFromTransactionName(last.name);
+
+    billImportSuggestions.push({
+      id: `bill-${Date.now()}-${key}`,
+      name: last.name,
+      amount: averageAmount,
+      category,
+      frequency: frequency === "weekly" ? "weekly" : "monthly",
+      nextDueDate:
+        frequency === "weekly"
+          ? toDateInputString(addDays(nextDueBase, 7))
+          : toDateInputString(addMonthsSafe(nextDueBase, 1)),
+      confidence,
+      imported: false,
+      notes: `Detected from ${group.length} similar charges`,
+      autopay: true,
+      reminderDays: frequency === "weekly" ? 1 : 3,
+      priority:
+        category === "insurance" || category === "housing"
+          ? "important"
+          : "flexible",
+      matchedTransactionIds: group.map(function (item) {
+        return item.id;
+      }),
+    });
+  });
+
+  billImportSuggestions.sort(function (a, b) {
+    return b.confidence - a.confidence || b.amount - a.amount;
+  });
+
+  automationScanState.billCandidateCount = billImportSuggestions.length;
+}
+
+function runTransactionScan() {
+  automationScanState.transactionCount = transactions.length;
+  automationScanState.lastScanAt = new Date().toISOString();
+  scanTransactionsForIncome();
+  scanTransactionsForBills();
+}
+
+function loadMockTransactions() {
+  transactions.length = 0;
+  createMockTransactions().forEach(function (transaction) {
+    transactions.push(transaction);
+  });
+  automationScanState.loadedMockSet = true;
+  if (!subscriptionState.linkedInstitution) {
+    subscriptionState.linkedInstitution = "Mock Checking";
+  }
+  subscriptionState.lastSyncAt = new Date().toISOString();
+  runTransactionScan();
+}
+
+function createMockIncomeSuggestions() {
+  const temp = transactions.slice();
+  transactions.length = 0;
+  createMockTransactions().forEach(function (transaction) {
+    transactions.push(transaction);
+  });
+  scanTransactionsForIncome();
+  const result = incomeImportSuggestions.slice().map(function (item) {
+    return { ...item, imported: false };
+  });
+  transactions.length = 0;
+  temp.forEach(function (transaction) {
+    transactions.push(transaction);
+  });
+  if (transactions.length) {
+    scanTransactionsForIncome();
+  } else {
+    incomeImportSuggestions.length = 0;
+    automationScanState.incomeCandidateCount = 0;
+  }
+  return result;
 }
 
 function createMockBillSuggestions() {
-  const nextMonth = addMonthsSafe(getTodayLocal(), 1);
-
-  return [
-    {
-      id: `bill-${Date.now()}-1`,
-      name: "GEICO",
-      amount: 146.0,
-      category: "insurance",
-      frequency: "monthly",
-      nextDueDate: toDateInputString(nextMonth),
-      confidence: 92,
-      imported: false,
-      notes: "Detected as recurring insurance payment",
-      autopay: true,
-      reminderDays: 3,
-      priority: "important",
-    },
-    {
-      id: `bill-${Date.now()}-2`,
-      name: "Netflix",
-      amount: 15.49,
-      category: "subscriptions",
-      frequency: "monthly",
-      nextDueDate: toDateInputString(addDays(nextMonth, 2)),
-      confidence: 95,
-      imported: false,
-      notes: "Detected as recurring subscription",
-      autopay: true,
-      reminderDays: 1,
-      priority: "flexible",
-    },
-    {
-      id: `bill-${Date.now()}-3`,
-      name: "Planet Fitness",
-      amount: 10.0,
-      category: "subscriptions",
-      frequency: "monthly",
-      nextDueDate: toDateInputString(addDays(nextMonth, 5)),
-      confidence: 81,
-      imported: false,
-      notes: "Detected as recurring membership",
-      autopay: true,
-      reminderDays: 1,
-      priority: "flexible",
-    },
-  ];
+  const temp = transactions.slice();
+  transactions.length = 0;
+  createMockTransactions().forEach(function (transaction) {
+    transactions.push(transaction);
+  });
+  scanTransactionsForBills();
+  const result = billImportSuggestions.slice().map(function (item) {
+    return { ...item, imported: false };
+  });
+  transactions.length = 0;
+  temp.forEach(function (transaction) {
+    transactions.push(transaction);
+  });
+  if (transactions.length) {
+    scanTransactionsForBills();
+  } else {
+    billImportSuggestions.length = 0;
+    automationScanState.billCandidateCount = 0;
+  }
+  return result;
 }
 
 function clearAutomationSuggestions() {
   incomeImportSuggestions.length = 0;
   billImportSuggestions.length = 0;
+  automationScanState.incomeCandidateCount = 0;
+  automationScanState.billCandidateCount = 0;
 }
 
 function importIncomeSuggestion(id) {
@@ -440,34 +976,41 @@ function importIncomeSuggestion(id) {
   });
   if (!suggestion || suggestion.imported) return;
 
-  if (el.nextPayAmountInput) {
-    el.nextPayAmountInput.value = round2(suggestion.amount);
-  }
+  const importedAmount = round2(suggestion.amount);
+  const importedFrequency = ["weekly", "biweekly", "monthly"].includes(
+    suggestion.frequency,
+  )
+    ? suggestion.frequency
+    : "biweekly";
 
-  if (el.nextPayDateInput && suggestion.payDate) {
+  let nextDate = null;
+  if (suggestion.payDate) {
     const parsed = parseLocalDate(suggestion.payDate);
-    const nextDate =
-      suggestion.frequency === "biweekly"
+    nextDate =
+      importedFrequency === "biweekly"
         ? addDays(parsed || getTodayLocal(), 14)
-        : suggestion.frequency === "weekly"
+        : importedFrequency === "weekly"
           ? addDays(parsed || getTodayLocal(), 7)
           : addMonthsSafe(parsed || getTodayLocal(), 1);
-
-    el.nextPayDateInput.value = toDateInputString(nextDate);
   }
 
-  if (
-    el.payFrequencyInput &&
-    ["weekly", "biweekly", "monthly"].includes(suggestion.frequency)
-  ) {
-    el.payFrequencyInput.value = suggestion.frequency;
+  if (el.nextPayAmountInput) el.nextPayAmountInput.value = importedAmount.toFixed(2);
+  if (el.nextPayDateInput && nextDate) el.nextPayDateInput.value = toDateInputString(nextDate);
+  if (el.payFrequencyInput) el.payFrequencyInput.value = importedFrequency;
+  if (el.baseNetPayInput) el.baseNetPayInput.value = importedAmount.toFixed(2);
+  if (el.expectedOtNetInput) el.expectedOtNetInput.value = "0.00";
+  if (el.useIncomeScenarioForForecastInput) {
+    el.useIncomeScenarioForForecastInput.value = "manual";
   }
 
-  if (el.baseNetPayInput && !safeNumber(el.baseNetPayInput.value)) {
-    el.baseNetPayInput.value = round2(suggestion.amount);
-  }
+  setForecastIncomeSourceFromImportedSuggestion(suggestion, {
+    amount: importedAmount,
+    nextPayDate: nextDate ? toDateInputString(nextDate) : "",
+    frequency: importedFrequency,
+  });
 
   suggestion.imported = true;
+  refreshIncomePlanning();
   refreshApp();
 }
 
@@ -1558,10 +2101,19 @@ function getIncomeScenarioAmount() {
 
   const hasManualBaseNetPay = manualBaseNetPay > 0;
   const hasManualExpectedOtNet = manualExpectedOtNet > 0;
+  const importedBaseNetPay = hasImportedForecastIncome()
+    ? round2(forecastIncomeSource.importedAmount)
+    : 0;
+  const shouldPreferImportedBase =
+    !hasManualBaseNetPay &&
+    ["imported", "scenario-imported"].includes(forecastIncomeSource.mode) &&
+    importedBaseNetPay > 0;
 
-  const baseNetPay = hasManualBaseNetPay
-    ? manualBaseNetPay
-    : defaults.baseNetPay;
+  const baseNetPay = shouldPreferImportedBase
+    ? importedBaseNetPay
+    : hasManualBaseNetPay
+      ? manualBaseNetPay
+      : defaults.baseNetPay;
   const expectedOtNet = hasManualExpectedOtNet
     ? manualExpectedOtNet
     : defaults.expectedOtNet;
@@ -1578,9 +2130,11 @@ function getIncomeScenarioAmount() {
     scenarioOtFactor: otFactor,
     scenarioOtNet,
     scenarioAmount,
-    baseSourceLabel: hasManualBaseNetPay
-      ? "Manual base net pay"
-      : defaults.baseSourceLabel,
+    baseSourceLabel: shouldPreferImportedBase
+      ? `Imported paycheck baseline${forecastIncomeSource.importedSourceName ? ` (${forecastIncomeSource.importedSourceName})` : ""}`
+      : hasManualBaseNetPay
+        ? "Manual base net pay"
+        : defaults.baseSourceLabel,
     otSourceLabel: hasManualExpectedOtNet
       ? "Manual OT add-on"
       : defaults.otSourceLabel,
@@ -1588,7 +2142,9 @@ function getIncomeScenarioAmount() {
     estimatedOvertimeHours: defaults.estimatedOvertimeHours,
     averageHourlyNet: defaults.averageHourlyNet,
     keepRate: defaults.keepRate,
+    usingImportedBaseline: shouldPreferImportedBase,
     usingPaystubDefaults:
+      !shouldPreferImportedBase &&
       !hasManualBaseNetPay && defaults.baseSourceLabel === "Paystub history",
     usingPaystubOtDefaults:
       !hasManualExpectedOtNet && defaults.otSourceLabel === "Paystub history",
@@ -1668,15 +2224,26 @@ function getForecastPaySourceDetails() {
     }
 
     return {
-      mode: "scenario",
-      label: `Income Scenario (${scenarioLabel})`,
+      mode: forecastIncomeSource.mode === "scenario-imported" ? "scenario-imported" : "scenario",
+      label:
+        forecastIncomeSource.mode === "scenario-imported"
+          ? `Income Scenario (${scenarioLabel}, Imported Baseline)`
+          : `Income Scenario (${scenarioLabel})`,
       amount: scenarioResult.scenarioAmount,
+    };
+  }
+
+  if (forecastIncomeSource.mode === "imported" && hasImportedForecastIncome()) {
+    return {
+      mode: "imported",
+      label: getForecastSourceDisplayLabel(),
+      amount: manualAmount,
     };
   }
 
   return {
     mode: "manual",
-    label: "Manual Next Paycheck Amount",
+    label: getForecastSourceDisplayLabel(),
     amount: manualAmount,
   };
 }
@@ -1892,6 +2459,7 @@ function applyHoursForecastToNextPaycheck() {
     el.useIncomeScenarioForForecastInput.value = "manual";
   }
 
+  markForecastSourceManual("hours-forecast-applied");
   refreshIncomePlanning();
   refreshApp();
 }
@@ -1907,6 +2475,7 @@ function copyHoursForecastToIncomeScenario() {
     el.expectedOtNetInput.value = prediction.scenarioOtNet.toFixed(2);
   }
 
+  markForecastSourceScenario("hours-forecast-scenario-copy");
   refreshIncomePlanning();
   refreshApp();
 }
@@ -2024,7 +2593,7 @@ function renderAutomationStatus() {
       `
         <strong>Automation is unlocked.</strong>
         <div class="automation-note">
-          Right now this uses mock detected transactions so we can finish the workflow before wiring in a real bank connection.
+          Right now this uses a mock transaction engine so we can finish the workflow before wiring in a real bank connection.
         </div>
       `,
     );
@@ -2040,11 +2609,99 @@ function renderAutomationStatus() {
     );
   }
 
+  const sourceLine = `<div class="automation-note">Current forecast source: <strong>${escapeHtml(getForecastSourceDisplayLabel())}</strong></div>`;
+  el.automationStatusCard.insertAdjacentHTML("beforeend", sourceLine);
+
   if (el.togglePremiumBtn) {
     el.togglePremiumBtn.textContent = isPremiumEnabled()
       ? "Switch to Free"
       : "Switch to Premium";
   }
+}
+
+function renderAutomationActivitySummary() {
+  if (!el.automationActivitySummary) return;
+
+  const linkedInstitution = subscriptionState.linkedInstitution || "Not connected";
+  const importedNextPayDate = getImportedForecastNextPayDate();
+  const importedAmount = hasImportedForecastIncome()
+    ? formatCurrency(forecastIncomeSource.importedAmount)
+    : "—";
+  const lastTransaction = getTransactionsSorted().slice(-1)[0] || null;
+  const lastTransactionText = lastTransaction
+    ? `${lastTransaction.name} • ${formatCurrency(lastTransaction.amount)}`
+    : "No transactions loaded";
+
+  setHtml(
+    el.automationActivitySummary,
+    `
+      <div class="source-status-grid">
+        <div class="source-status-item">
+          <span class="source-status-label">Connected account</span>
+          <div class="source-status-value">${escapeHtml(linkedInstitution)}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Last sync</span>
+          <div class="source-status-value">${escapeHtml(formatDateTime(subscriptionState.lastSyncAt))}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Transactions loaded</span>
+          <div class="source-status-value">${transactions.length}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Last scan</span>
+          <div class="source-status-value">${escapeHtml(formatDateTime(automationScanState.lastScanAt))}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Income candidates</span>
+          <div class="source-status-value">${automationScanState.incomeCandidateCount || incomeImportSuggestions.length}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Bill candidates</span>
+          <div class="source-status-value">${automationScanState.billCandidateCount || billImportSuggestions.length}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Imported paycheck</span>
+          <div class="source-status-value">${escapeHtml(importedAmount)}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Imported next payday</span>
+          <div class="source-status-value">${importedNextPayDate ? escapeHtml(formatDate(importedNextPayDate)) : "—"}</div>
+        </div>
+      </div>
+      <div class="source-status-note">Latest transaction seen: <strong>${escapeHtml(lastTransactionText)}</strong></div>
+      <div class="source-status-note">Use <strong>Load Mock Transactions</strong> to load a sample transaction history, then use <strong>Re-Scan Transactions</strong> to regenerate paycheck and bill suggestions.</div>
+    `,
+  );
+
+  if (el.useImportedForecastBtn) {
+    el.useImportedForecastBtn.disabled = !hasImportedForecastIncome();
+  }
+}
+
+
+function renderIncomeSourceControlSummary() {
+  if (!el.incomeSourceControlSummary) return;
+
+  const usingScenario = el.useIncomeScenarioForForecastInput?.value === "scenario";
+  const importedSourceName = forecastIncomeSource.importedSourceName || "Imported paycheck";
+
+  setHtml(
+    el.incomeSourceControlSummary,
+    `
+      <div class="source-status-grid">
+        <div class="source-status-item">
+          <span class="source-status-label">Forecast mode</span>
+          <div class="source-status-value">${usingScenario ? "Scenario" : "Manual"}</div>
+        </div>
+        <div class="source-status-item">
+          <span class="source-status-label">Active source</span>
+          <div class="source-status-value">${escapeHtml(getForecastSourceDisplayLabel())}</div>
+        </div>
+      </div>
+      <div class="source-status-note">Imported source on file: <strong>${escapeHtml(importedSourceName)}</strong>${hasImportedForecastIncome() ? ` • ${formatCurrency(forecastIncomeSource.importedAmount)}` : " • none yet"}</div>
+    `,
+  );
 }
 
 function renderIncomeImportSuggestions() {
@@ -2053,7 +2710,7 @@ function renderIncomeImportSuggestions() {
   if (!incomeImportSuggestions.length) {
     setHtml(
       el.incomeImportSuggestions,
-      `<div class="automation-empty">No detected income yet. Tap <strong>Load Mock Income</strong> to test the flow.</div>`,
+      `<div class="automation-empty">No detected income yet. Tap <strong>Load Mock Transactions</strong> to test the flow.</div>`,
     );
     return;
   }
@@ -2111,7 +2768,7 @@ function renderBillImportSuggestions() {
   if (!billImportSuggestions.length) {
     setHtml(
       el.billImportSuggestions,
-      `<div class="automation-empty">No recurring bills detected yet. Tap <strong>Load Mock Bills</strong> to test the import workflow.</div>`,
+      `<div class="automation-empty">No recurring bills detected yet. Tap <strong>Load Mock Transactions</strong> to test the import workflow.</div>`,
     );
     return;
   }
@@ -2166,15 +2823,39 @@ function renderBillImportSuggestions() {
 
 function renderForecastPaySourceMessage() {
   const detail = getForecastPaySourceDetails();
+  const isScenarioMode = ["scenario", "scenario-imported"].includes(detail.mode);
+  const sourceDate = isImportedForecastMode()
+    ? getImportedForecastNextPayDate()
+    : el.nextPayDateInput?.value;
 
   const html = `
-    <div class="warning-box ${detail.mode === "scenario" ? "warning-box-good" : "warning-box-warning"}">
-      Forecast is using <strong>${detail.label}</strong>: ${formatCurrency(detail.amount)}
+    <div class="warning-box ${isScenarioMode ? "warning-box-good" : "warning-box-warning"} warning-box-source">
+      <div class="warning-box-title">Forecast is using ${escapeHtml(detail.label)}</div>
+      <div>${formatCurrency(detail.amount)}</div>
+      <div class="automation-note">${escapeHtml(getForecastSourceReasonLabel())}${sourceDate ? ` • next pay date ${escapeHtml(formatDate(sourceDate))}` : ""}</div>
     </div>
   `;
 
   setHtml(el.forecastPaySourceMessage, html);
   setHtml(el.forecastPaySourceMessageForecast, html);
+
+  if (el.forecastSourceStatusInline) {
+    setHtml(
+      el.forecastSourceStatusInline,
+      `
+        <div class="source-status-grid">
+          <div class="source-status-item">
+            <span class="source-status-label">Current source</span>
+            <div class="source-status-value">${escapeHtml(getForecastSourceDisplayLabel())}</div>
+          </div>
+          <div class="source-status-item">
+            <span class="source-status-label">Reason</span>
+            <div class="source-status-value">${escapeHtml(getForecastSourceReasonLabel())}</div>
+          </div>
+        </div>
+      `,
+    );
+  }
 }
 
 function renderStressTestMessage() {
@@ -6262,6 +6943,7 @@ function refreshApp() {
   renderPaystubAnalysis();
   renderPaystubHistory();
   renderAutomationStatus();
+  renderAutomationActivitySummary();
   renderIncomeImportSuggestions();
   renderBillImportSuggestions();
   saveData();
@@ -6430,6 +7112,7 @@ function saveIncomePlanningData() {
     hoursForecastOtHours: el.hoursForecastOtInput
       ? el.hoursForecastOtInput.value
       : "",
+    forecastIncomeSource,
   };
 
   localStorage.setItem(STORAGE_KEYS.income, JSON.stringify(incomePlanningData));
@@ -6459,6 +7142,7 @@ function loadIncomePlanningData() {
     if (el.hoursForecastOtInput) {
       el.hoursForecastOtInput.value = data.hoursForecastOtHours || "0";
     }
+    forecastIncomeSource = normalizeForecastIncomeSource(data.forecastIncomeSource);
   } catch (error) {
     console.error("Failed to load income planning data:", error);
     localStorage.removeItem(STORAGE_KEYS.income);
@@ -6507,6 +7191,9 @@ function saveData() {
     paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
     paystubHistory,
     subscriptionState,
+    automationScanState,
+    forecastIncomeSource,
+    transactions,
     incomeImportSuggestions,
     billImportSuggestions,
   };
@@ -6566,6 +7253,28 @@ function loadData() {
         linkedInstitution: data.subscriptionState.linkedInstitution || "",
         lastSyncAt: data.subscriptionState.lastSyncAt || "",
       };
+    }
+
+    forecastIncomeSource = normalizeForecastIncomeSource(data.forecastIncomeSource);
+
+    if (data.automationScanState && typeof data.automationScanState === "object") {
+      automationScanState = {
+        lastScanAt: data.automationScanState.lastScanAt || "",
+        transactionCount: safeNumber(data.automationScanState.transactionCount),
+        incomeCandidateCount: safeNumber(data.automationScanState.incomeCandidateCount),
+        billCandidateCount: safeNumber(data.automationScanState.billCandidateCount),
+        loadedMockSet: Boolean(data.automationScanState.loadedMockSet),
+      };
+    }
+
+    transactions.length = 0;
+    if (Array.isArray(data.transactions)) {
+      data.transactions.forEach(function (item) {
+        const normalized = normalizeTransaction(item);
+        if (normalized) {
+          transactions.push(normalized);
+        }
+      });
     }
 
     incomeImportSuggestions.length = 0;
@@ -6767,6 +7476,12 @@ function exportData() {
     },
     paystubDraft: el.paystubTextInput ? el.paystubTextInput.value : "",
     paystubHistory,
+    subscriptionState,
+    automationScanState,
+    forecastIncomeSource,
+    transactions,
+    incomeImportSuggestions,
+    billImportSuggestions,
   };
 
   const jsonString = JSON.stringify(data, null, 2);
@@ -7015,6 +7730,75 @@ function importData(file) {
           el.workNetRetentionInput.value = workData.netRetention || "";
       }
 
+      if (importedData.subscriptionState) {
+        subscriptionState = {
+          plan: importedData.subscriptionState.plan === "premium" ? "premium" : "free",
+          trialStartedAt: importedData.subscriptionState.trialStartedAt || "",
+          trialUsed: Boolean(importedData.subscriptionState.trialUsed),
+          bankSyncEnabled: Boolean(importedData.subscriptionState.bankSyncEnabled),
+          linkedInstitution: importedData.subscriptionState.linkedInstitution || "",
+          lastSyncAt: importedData.subscriptionState.lastSyncAt || "",
+        };
+      }
+
+      if (importedData.automationScanState) {
+        automationScanState = {
+          lastScanAt: importedData.automationScanState.lastScanAt || "",
+          transactionCount: safeNumber(importedData.automationScanState.transactionCount),
+          incomeCandidateCount: safeNumber(importedData.automationScanState.incomeCandidateCount),
+          billCandidateCount: safeNumber(importedData.automationScanState.billCandidateCount),
+          loadedMockSet: Boolean(importedData.automationScanState.loadedMockSet),
+        };
+      }
+
+      forecastIncomeSource = normalizeForecastIncomeSource(importedData.forecastIncomeSource);
+
+      transactions.length = 0;
+      if (Array.isArray(importedData.transactions)) {
+        importedData.transactions.forEach(function (item) {
+          const normalized = normalizeTransaction(item);
+          if (normalized) transactions.push(normalized);
+        });
+      }
+
+      incomeImportSuggestions.length = 0;
+      if (Array.isArray(importedData.incomeImportSuggestions)) {
+        importedData.incomeImportSuggestions.forEach(function (item) {
+          if (!item || !item.id) return;
+          incomeImportSuggestions.push({
+            id: item.id,
+            source: item.source || "Unknown source",
+            description: item.description || "",
+            amount: safeNumber(item.amount),
+            payDate: item.payDate || "",
+            frequency: item.frequency || "biweekly",
+            confidence: safeNumber(item.confidence),
+            imported: Boolean(item.imported),
+          });
+        });
+      }
+
+      billImportSuggestions.length = 0;
+      if (Array.isArray(importedData.billImportSuggestions)) {
+        importedData.billImportSuggestions.forEach(function (item) {
+          if (!item || !item.id) return;
+          billImportSuggestions.push({
+            id: item.id,
+            name: item.name || "Unnamed bill",
+            amount: safeNumber(item.amount),
+            category: item.category || "other",
+            frequency: item.frequency || "monthly",
+            nextDueDate: item.nextDueDate || "",
+            confidence: safeNumber(item.confidence),
+            imported: Boolean(item.imported),
+            notes: item.notes || "",
+            autopay: Boolean(item.autopay),
+            reminderDays: safeNumber(item.reminderDays),
+            priority: item.priority || "important",
+          });
+        });
+      }
+
       paystubHistory.length = 0;
       if (Array.isArray(importedData.paystubHistory)) {
         for (let i = 0; i < importedData.paystubHistory.length; i++) {
@@ -7192,6 +7976,7 @@ if (el.applyIncomeScenarioBtn) {
     }
 
     el.nextPayAmountInput.value = result.scenarioAmount.toFixed(2);
+    markForecastSourceScenario("apply-income-scenario");
     refreshApp();
   });
 }
@@ -7202,6 +7987,7 @@ if (el.allocationModeInput) {
 
 if (el.useIncomeScenarioForForecastInput) {
   el.useIncomeScenarioForForecastInput.addEventListener("change", function () {
+    syncForecastSourceWithSelection("forecast-source-select");
     refreshIncomePlanning();
     refreshApp();
   });
@@ -7216,6 +8002,11 @@ if (el.incomeScenarioInput) {
 
 if (el.baseNetPayInput) {
   el.baseNetPayInput.addEventListener("input", function () {
+    if (el.useIncomeScenarioForForecastInput?.value === "scenario") {
+      markForecastSourceScenario("manual-edit");
+    } else {
+      markForecastSourceManual("manual-edit");
+    }
     refreshIncomePlanning();
     refreshApp();
   });
@@ -7223,6 +8014,9 @@ if (el.baseNetPayInput) {
 
 if (el.expectedOtNetInput) {
   el.expectedOtNetInput.addEventListener("input", function () {
+    if (el.useIncomeScenarioForForecastInput?.value === "scenario") {
+      markForecastSourceScenario("manual-edit");
+    }
     refreshIncomePlanning();
     refreshApp();
   });
@@ -7241,6 +8035,7 @@ if (el.useEstimatorAverageBtn) {
       el.baseNetPayInput.value = estimate.averageNet.toFixed(2);
     }
 
+    markForecastSourceManual("manual-edit");
     refreshIncomePlanning();
     refreshApp();
   });
@@ -7259,6 +8054,7 @@ if (el.useManualNextPayBtn) {
       el.baseNetPayInput.value = manualAmount.toFixed(2);
     }
 
+    markForecastSourceManual("manual-override");
     refreshIncomePlanning();
     refreshApp();
   });
@@ -7274,6 +8070,7 @@ if (el.copyScenarioToManualBtn) {
     }
 
     el.nextPayAmountInput.value = result.scenarioAmount.toFixed(2);
+    markForecastSourceManual("manual-override");
     refreshApp();
   });
 }
@@ -7507,18 +8304,50 @@ if (el.connectBankBtn) {
   });
 }
 
-if (el.loadMockIncomeBtn) {
-  el.loadMockIncomeBtn.addEventListener("click", function () {
+
+if (el.useImportedForecastBtn) {
+  el.useImportedForecastBtn.addEventListener("click", function () {
+    if (!activateImportedForecastSource()) {
+      alert("Import a paycheck suggestion first.");
+    }
+  });
+}
+
+if (el.revertForecastToManualBtn) {
+  el.revertForecastToManualBtn.addEventListener("click", function () {
+    revertForecastSourceToManual();
+  });
+}
+
+if (el.nextPayAmountInput) {
+  el.nextPayAmountInput.addEventListener("input", function () {
+    markForecastSourceManual("manual-override");
+  });
+}
+
+if (el.nextPayDateInput) {
+  el.nextPayDateInput.addEventListener("change", function () {
+    if (!isImportedForecastMode()) {
+      markForecastSourceManual("manual-override");
+    }
+  });
+}
+
+if (el.payFrequencyInput) {
+  el.payFrequencyInput.addEventListener("change", function () {
+    if (!isImportedForecastMode()) {
+      markForecastSourceManual("manual-override");
+    }
+  });
+}
+
+if (el.loadMockIncomeBtn) {  el.loadMockIncomeBtn.addEventListener("click", function () {
     if (!getAutomationAccessEnabled()) {
       alert("Automation is locked on the free plan.");
       return;
     }
 
-    incomeImportSuggestions.length = 0;
-    createMockIncomeSuggestions().forEach(function (item) {
-      incomeImportSuggestions.push(item);
-    });
-
+    loadMockTransactions();
     refreshApp();
   });
 }
@@ -7526,6 +8355,7 @@ if (el.loadMockIncomeBtn) {
 if (el.clearIncomeSuggestionsBtn) {
   el.clearIncomeSuggestionsBtn.addEventListener("click", function () {
     incomeImportSuggestions.length = 0;
+    automationScanState.incomeCandidateCount = 0;
     refreshApp();
   });
 }
@@ -7537,11 +8367,11 @@ if (el.loadMockBillsBtn) {
       return;
     }
 
-    billImportSuggestions.length = 0;
-    createMockBillSuggestions().forEach(function (item) {
-      billImportSuggestions.push(item);
-    });
-
+    if (!transactions.length) {
+      loadMockTransactions();
+    } else {
+      runTransactionScan();
+    }
     refreshApp();
   });
 }
@@ -7549,6 +8379,7 @@ if (el.loadMockBillsBtn) {
 if (el.clearBillSuggestionsBtn) {
   el.clearBillSuggestionsBtn.addEventListener("click", function () {
     billImportSuggestions.length = 0;
+    automationScanState.billCandidateCount = 0;
     refreshApp();
   });
 }
@@ -7916,6 +8747,13 @@ loadData();
 initializeCollapsibleCards();
 initializeToolChipNavigation();
 initializeTodayQuickActions();
+
+if (el.loadMockIncomeBtn) {
+  el.loadMockIncomeBtn.textContent = "Load Mock Transactions";
+}
+if (el.loadMockBillsBtn) {
+  el.loadMockBillsBtn.textContent = "Re-Scan Transactions";
+}
 
 if (el.hoursForecastRegularInput && !el.hoursForecastRegularInput.value) {
   el.hoursForecastRegularInput.value = String(

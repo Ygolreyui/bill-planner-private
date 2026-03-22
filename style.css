@@ -1796,3 +1796,60 @@ summary::-webkit-details-marker {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================
+   AUTOMATION ACTIVITY / SOURCE STATUS
+========================= */
+
+#automationActivitySummary,
+#forecastSourceStatusInline,
+#incomeSourceControlSummary {
+  margin-top: 14px;
+}
+
+.source-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.source-status-item {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: rgba(10, 16, 28, 0.34);
+}
+
+.source-status-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-soft);
+}
+
+.source-status-value {
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
+.source-status-note {
+  margin-top: 10px;
+  color: var(--text-soft);
+}
+
+.warning-box-source {
+  display: grid;
+  gap: 8px;
+}
+
+.warning-box-source .warning-box-title {
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+@media (max-width: 900px) {
+  .source-status-grid {
+    grid-template-columns: 1fr;
+  }
+}

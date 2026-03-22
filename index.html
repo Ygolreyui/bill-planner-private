@@ -229,6 +229,7 @@
               <span class="section-subtitle">See whether the planner is using your manual paycheck or your income scenario.</span>
             </div>
             <div id="forecastPaySourceMessage"></div>
+            <div id="forecastSourceStatusInline" class="card-soft-panel"></div>
           </section>
         </section>
 
@@ -693,6 +694,13 @@
 
             <div class="automation-status-card" id="automationStatusCard"></div>
 
+            <div class="card-soft-panel" id="automationActivitySummary"></div>
+
+            <div class="form-buttons">
+              <button id="useImportedForecastBtn" type="button" class="secondary-btn">Use Imported Forecast</button>
+              <button id="revertForecastToManualBtn" type="button" class="secondary-btn">Revert to Manual Forecast</button>
+            </div>
+
             <div class="automation-tools-grid">
               <section class="tools-panel">
                 <h3>Income Detection</h3>
@@ -778,6 +786,8 @@
               <h3>Income Planning Preview</h3>
               <div id="incomePlanningPreview"></div>
             </div>
+
+            <div id="incomeSourceControlSummary" class="card-soft-panel"></div>
 
             <div class="form-buttons">
               <button id="applyIncomeScenarioBtn" type="button">Use Scenario for Next Paycheck</button>
