@@ -1,10 +1,10 @@
 {
   "name": "Bill / Paycheck Planner",
   "short_name": "Bill Planner",
-  "start_url": "./index.html",
+  "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4f6f8",
-  "theme_color": "#2d6cdf",
+  "background_color": "#0a111d",
+  "theme_color": "#5b8cff",
   "description": "A paycheck and bill planner that helps you see what money is safe to spend before your next paycheck.",
   "icons": [
     {

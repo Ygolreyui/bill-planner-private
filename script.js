@@ -1624,6 +1624,25 @@ function formatHours(value) {
   return `${rounded.toFixed(2)}`;
 }
 
+function normalizePaystubHoursValue(value) {
+  const raw = Math.abs(safeNumber(value));
+  if (!raw) return 0;
+  if (raw > 120 && raw <= 12000) return round2(raw / 100);
+  if (raw > 80 && raw <= 120 && Number.isInteger(raw) && raw % 100 === 0) {
+    return round2(raw / 100);
+  }
+  return round2(raw);
+}
+
+function normalizePaystubRateValue(value) {
+  const raw = Math.abs(safeNumber(value));
+  if (!raw) return 0;
+  if (raw >= 100 && raw <= 10000 && Number.isInteger(raw)) {
+    return round2(raw / 100);
+  }
+  return round2(raw);
+}
+
 function getWorkPlannerSettings() {
   return {
     hourlyRate: safeNumber(el.workHourlyRateInput?.value),
@@ -5666,7 +5685,7 @@ function extractHoursByLabel(text, labels) {
     for (let r = 0; r < regexes.length; r++) {
       const match = text.match(regexes[r]);
       if (match && match[1] !== undefined) {
-        const value = Math.abs(safeNumber(match[1]));
+        const value = normalizePaystubHoursValue(match[1]);
         if (value > 0) return value;
       }
     }
@@ -5702,8 +5721,8 @@ function extractPayRateLines(text) {
     for (let p = 0; p < patterns.length; p++) {
       const match = line.match(patterns[p].regex);
       if (!match) continue;
-      const hours = round2(Math.abs(safeNumber(match[1])));
-      const rate = round2(Math.abs(safeNumber(match[2])));
+      const hours = normalizePaystubHoursValue(match[1]);
+      const rate = normalizePaystubRateValue(match[2]);
       const pay = round2(Math.abs(safeNumber(match[3])));
       if (patterns[p].key === "regular") {
         result.regularHours = result.regularHours || hours;
@@ -6005,9 +6024,7 @@ function getPaystubValidationWarnings(parsed) {
   }
 
   const difference = round2(parsed.gross - parsed.net);
-  const expected = parsed.deductionTotal > 0
-    ? round2(parsed.deductionTotal)
-    : round2(parsed.taxTotal);
+  const expected = round2(parsed.taxTotal + parsed.deductionTotal);
 
   if (
     parsed.gross > 0 &&
@@ -6038,7 +6055,7 @@ function parsePaystubText(text) {
 
   function directAmount(pattern) {
     const match = normalized.match(pattern);
-    return match ? Math.abs(safeNumber(match[1])) : 0;
+    return match ? normalizePaystubHoursValue(match[1]) : 0;
   }
 
   function directHours(pattern) {
@@ -6172,7 +6189,10 @@ function parsePaystubText(text) {
   if ((!deductionTotal || deductionTotal < fallbackDifference - taxTotal) && fallbackDifference > 0) {
     deductionTotal = Math.max(0, fallbackDifference - taxTotal);
   }
-  if (!gross && net > 0 && fallbackDifference > 0) {
+  if (!net && gross > 0) {
+    net = round2(Math.max(0, gross - taxTotal - deductionTotal));
+  }
+  if (!gross && net > 0) {
     gross = round2(net + taxTotal + deductionTotal);
   }
 
