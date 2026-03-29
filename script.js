@@ -326,6 +326,14 @@ const STORAGE_KEYS = {
   hoursForecast: "billPlannerHoursForecastData",
 };
 
+const ENABLE_SPENDING_BUCKETS = false;
+const PLAID_API = {
+  createLinkTokenUrl: "/api/plaid/create_link_token",
+  exchangePublicTokenUrl: "/api/plaid/exchange_public_token",
+  balanceUrl: "/api/plaid/balance",
+  transactionsUrl: "/api/plaid/transactions",
+};
+
 const PAYSTUB_HISTORY_LIMIT = 24;
 
 /* =========================
@@ -361,7 +369,7 @@ function hasActiveTrial() {
 }
 
 function getAutomationAccessEnabled() {
-  return isPremiumEnabled() || hasActiveTrial();
+  return true;
 }
 
 function getTrialDaysRemaining() {
@@ -1624,25 +1632,6 @@ function formatHours(value) {
   return `${rounded.toFixed(2)}`;
 }
 
-function normalizePaystubHoursValue(value) {
-  const raw = Math.abs(safeNumber(value));
-  if (!raw) return 0;
-  if (raw > 120 && raw <= 12000) return round2(raw / 100);
-  if (raw > 80 && raw <= 120 && Number.isInteger(raw) && raw % 100 === 0) {
-    return round2(raw / 100);
-  }
-  return round2(raw);
-}
-
-function normalizePaystubRateValue(value) {
-  const raw = Math.abs(safeNumber(value));
-  if (!raw) return 0;
-  if (raw >= 100 && raw <= 10000 && Number.isInteger(raw)) {
-    return round2(raw / 100);
-  }
-  return round2(raw);
-}
-
 function getWorkPlannerSettings() {
   return {
     hourlyRate: safeNumber(el.workHourlyRateInput?.value),
@@ -1786,6 +1775,8 @@ function sortBillsForAllocation(billsToSort, mode) {
 }
 
 function getBucketOccurrencesUntil(endDate) {
+  if (!ENABLE_SPENDING_BUCKETS) return [];
+
   const occurrences = [];
   const today = getTodayLocal();
 
@@ -1793,21 +1784,13 @@ function getBucketOccurrencesUntil(endDate) {
 
   for (let i = 0; i < spendingBuckets.length; i++) {
     const bucket = spendingBuckets[i];
-    let currentDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
+    let currentDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     while (currentDate <= endDate) {
       occurrences.push({
         name: bucket.name,
         rawAmount: safeNumber(bucket.amount),
-        amount: getAdjustedAmountForCategory(
-          bucket.amount,
-          bucket.category,
-          "mine",
-        ),
+        amount: getAdjustedAmountForCategory(bucket.amount, bucket.category, "mine"),
         dueDate: toDateInputString(currentDate),
         category: (bucket.category || "other").toLowerCase().trim(),
         frequency: bucket.frequency || "weekly",
@@ -1932,6 +1915,8 @@ function getForecastBillEvents(bill, forecastEndDate) {
       break;
     } else if (bill.frequency === "weekly") {
       billDate.setDate(billDate.getDate() + 7);
+    } else if (bill.frequency === "biweekly") {
+      billDate.setDate(billDate.getDate() + 14);
     } else if (bill.frequency === "monthly") {
       billDate = addMonthsSafe(billDate, 1);
     } else if (bill.frequency === "yearly") {
@@ -2299,19 +2284,8 @@ function getPaycheckModelFromHistory() {
     const overtimeRate = paystubEstimate.averageOvertimeRate > 0
       ? paystubEstimate.averageOvertimeRate
       : round2(regularRate * Math.max(1, safeNumber(workSettings.otMultiplier || 1.5)));
-    const taxRate = paystubEstimate.averageTaxRateOnWorkGross > 0
-      ? clamp(paystubEstimate.averageTaxRateOnWorkGross, 0, 0.45)
-      : paystubEstimate.averageWorkGross > 0
-        ? clamp(paystubEstimate.averageTaxes / paystubEstimate.averageWorkGross, 0, 0.45)
-        : 0;
-    const retirementRate = paystubEstimate.averageRetirementRate > 0
-      ? clamp(paystubEstimate.averageRetirementRate, 0, 0.2)
-      : paystubEstimate.averageWorkGross > 0
-        ? clamp(paystubEstimate.averageRetirement401k / paystubEstimate.averageWorkGross, 0, 0.2)
-        : 0;
-    const fixedOtherDeductions = round2(Math.max(0, paystubEstimate.averageFixedOtherDeductions || 0));
-    const keepRate = paystubEstimate.averageWorkGross > 0
-      ? clamp((paystubEstimate.averageNet - fixedOtherDeductions) / paystubEstimate.averageWorkGross, 0.45, 0.95)
+    const keepRate = paystubEstimate.averageGross > 0
+      ? clamp(paystubEstimate.averageNet / paystubEstimate.averageGross, 0.45, 0.95)
       : 0.72;
 
     return {
@@ -2323,9 +2297,7 @@ function getPaycheckModelFromHistory() {
       overtimeRate: round2(overtimeRate),
       grossPerHour: round2(paystubEstimate.averageHourlyGross),
       netPerHour: round2(paystubEstimate.averageHourlyNet),
-      taxRate,
-      retirementRate,
-      fixedOtherDeductions,
+      deductionRate: clamp(1 - keepRate, 0.05, 0.55),
       keepRate,
       confidence: paystubEstimate.count >= 3 ? "High" : paystubEstimate.count >= 2 ? "Medium" : "Starter",
       historyCount: paystubEstimate.count,
@@ -2334,9 +2306,6 @@ function getPaycheckModelFromHistory() {
 
   const hourlyRate = Math.max(0, safeNumber(workSettings.hourlyRate));
   const keepRate = getEstimatedNetRetentionRate(workSettings);
-  const taxRate = clamp((1 - keepRate) * 0.72, 0, 0.4);
-  const retirementRate = clamp((1 - keepRate - taxRate) * 0.45, 0, 0.15);
-  const fixedOtherDeductions = 0;
 
   if (hourlyRate > 0) {
     return {
@@ -2348,9 +2317,7 @@ function getPaycheckModelFromHistory() {
       overtimeRate: round2(hourlyRate * Math.max(1, safeNumber(workSettings.otMultiplier || 1.5))),
       grossPerHour: round2(hourlyRate),
       netPerHour: round2(hourlyRate * keepRate),
-      taxRate,
-      retirementRate,
-      fixedOtherDeductions,
+      deductionRate: clamp(1 - keepRate, 0.05, 0.55),
       keepRate,
       confidence: "Fallback",
       historyCount: 0,
@@ -2373,12 +2340,9 @@ function calculateHoursForecastPrediction() {
   const regularGross = round2(regularHours * model.regularRate);
   const overtimeGross = round2(overtimeHours * model.overtimeRate);
   const gross = round2(regularGross + overtimeGross);
-  const taxes = round2(gross * model.taxRate);
-  const retirement = round2(gross * model.retirementRate);
-  const otherDeductions = round2(model.fixedOtherDeductions);
-  const deductions = round2(retirement + otherDeductions);
-  const net = round2(Math.max(0, gross - taxes - deductions));
-  const scenarioBaseNet = round2(Math.max(0, regularGross - regularGross * model.taxRate - regularGross * model.retirementRate - otherDeductions));
+  const deductions = round2(gross * model.deductionRate);
+  const net = round2(Math.max(0, gross - deductions));
+  const scenarioBaseNet = round2(Math.max(0, regularGross * model.keepRate));
   const scenarioOtNet = round2(Math.max(0, net - scenarioBaseNet));
 
   return {
@@ -2387,9 +2351,9 @@ function calculateHoursForecastPrediction() {
     totalHours,
     gross,
     net,
-    taxes,
-    retirement,
-    otherDeductions,
+    taxes: 0,
+    retirement: 0,
+    otherDeductions: deductions,
     deductions,
     keepRate: round2(model.keepRate * 100),
     sourceLabel: model.sourceLabel,
@@ -2409,10 +2373,7 @@ function renderHoursForecast() {
 
   const prediction = calculateHoursForecastPrediction();
   if (!prediction) {
-    setHtml(
-      el.hoursForecastResults,
-      '<p class="timeline-empty">Add paystub history or enter your hourly rate in Work Planner to unlock hours-based paycheck prediction.</p>',
-    );
+    setHtml(el.hoursForecastResults, '<p class="timeline-empty">Add paystub history or enter your hourly rate in Work Planner to unlock hours-based paycheck prediction.</p>');
     if (el.applyHoursForecastBtn) el.applyHoursForecastBtn.disabled = true;
     if (el.copyHoursForecastToScenarioBtn) el.copyHoursForecastToScenarioBtn.disabled = true;
     return;
@@ -2425,36 +2386,17 @@ function renderHoursForecast() {
     el.hoursForecastResults,
     `
       <div class="estimate-results-grid">
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Predicted Gross</span>
-          <span class="estimate-result-value">${formatCurrency(prediction.gross)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Predicted Net</span>
-          <span class="estimate-result-value ${getBalanceStatus(prediction.net)}">${formatCurrency(prediction.net)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Estimated Taxes</span>
-          <span class="estimate-result-value">${formatCurrency(prediction.taxes)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Estimated Deductions</span>
-          <span class="estimate-result-value">${formatCurrency(prediction.deductions)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Regular / OT Hours</span>
-          <span class="estimate-result-value">${prediction.regularHours.toFixed(2)} / ${prediction.overtimeHours.toFixed(2)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Confidence</span>
-          <span class="estimate-result-value">${prediction.confidence}</span>
-        </div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Predicted Gross</span><span class="estimate-result-value">${formatCurrency(prediction.gross)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Predicted Net</span><span class="estimate-result-value ${getBalanceStatus(prediction.net)}">${formatCurrency(prediction.net)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Estimated Deductions</span><span class="estimate-result-value">${formatCurrency(prediction.deductions)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Keep Rate</span><span class="estimate-result-value">${prediction.keepRate.toFixed(1)}%</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Regular / OT Hours</span><span class="estimate-result-value">${prediction.regularHours.toFixed(2)} / ${prediction.overtimeHours.toFixed(2)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Confidence</span><span class="estimate-result-value">${prediction.confidence}</span></div>
       </div>
       <div class="planner-chip-row">
         <span class="planner-chip">Model source: ${prediction.sourceLabel}</span>
         <span class="planner-chip">Gross / hr ${formatCurrency(prediction.grossPerHour)}</span>
         <span class="planner-chip">Net / hr ${formatCurrency(prediction.netPerHour)}</span>
-        <span class="planner-chip">Keep rate ${prediction.keepRate.toFixed(1)}%</span>
         ${prediction.historyCount > 0 ? `<span class="planner-chip">${prediction.historyCount} paystub${prediction.historyCount === 1 ? "" : "s"}</span>` : ""}
       </div>
     `,
@@ -2590,52 +2532,124 @@ function renderPieChart(canvas, existingChart, totals) {
    RENDER FUNCTIONS
 ========================= */
 
+async function requestJson(url, options) {
+  const response = await fetch(url, options || {});
+  if (!response.ok) {
+    const message = await response.text().catch(function () {
+      return response.statusText || "Request failed";
+    });
+    throw new Error(message || response.statusText || "Request failed");
+  }
+  return await response.json();
+}
+
+function normalizeTransactionsFromPlaid(items) {
+  if (!Array.isArray(items)) return [];
+
+  return items.map(function (item, index) {
+    return normalizeTransaction({
+      id: item.transaction_id || item.id || `tx-plaid-${Date.now()}-${index + 1}`,
+      name: item.name || item.merchant_name || item.description || "Transaction",
+      amount: -Math.abs(safeNumber(item.amount || 0)),
+      date: parseFlexibleDateToInput(item.date || item.authorized_date),
+      source: "plaid-live",
+      category: item.category?.[0] || detectCategoryFromTransactionName(item.name || item.merchant_name || item.description || ""),
+      notes: item.merchant_name || "",
+    });
+  }).filter(Boolean);
+}
+
+async function syncLiveBankData() {
+  const [balanceData, transactionData] = await Promise.all([
+    requestJson(PLAID_API.balanceUrl),
+    requestJson(PLAID_API.transactionsUrl),
+  ]);
+
+  const accounts = balanceData.accounts || [];
+  const firstCashAccount = accounts[0];
+  const availableBalance = safeNumber(firstCashAccount?.balances?.available || firstCashAccount?.balances?.current || 0);
+  if (el.currentBalanceInput && availableBalance > 0) {
+    el.currentBalanceInput.value = availableBalance.toFixed(2);
+  }
+
+  const normalizedTransactions = normalizeTransactionsFromPlaid(transactionData.transactions || []);
+  if (normalizedTransactions.length) {
+    transactions.length = 0;
+    normalizedTransactions.forEach(function (transaction) {
+      transactions.push(transaction);
+    });
+    runTransactionScan();
+  }
+
+  subscriptionState.bankSyncEnabled = true;
+  subscriptionState.linkedInstitution = balanceData.institution_name || subscriptionState.linkedInstitution || "Connected bank";
+  subscriptionState.lastSyncAt = new Date().toISOString();
+}
+
+async function startLiveBankConnection() {
+  if (typeof Plaid === "undefined") {
+    alert("Plaid Link is not loaded yet. Refresh once and try again.");
+    return;
+  }
+
+  try {
+    const tokenData = await requestJson(PLAID_API.createLinkTokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ products: ["transactions"] }),
+    });
+
+    if (!tokenData.link_token) throw new Error("Missing link token");
+
+    const handler = Plaid.create({
+      token: tokenData.link_token,
+      onSuccess: async function (publicToken, metadata) {
+        try {
+          await requestJson(PLAID_API.exchangePublicTokenUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ public_token: publicToken, institution_name: metadata?.institution?.name || "Connected bank" }),
+          });
+          subscriptionState.linkedInstitution = metadata?.institution?.name || "Connected bank";
+          await syncLiveBankData();
+          refreshApp();
+          alert("Bank connected. Current balance and recent transactions were refreshed.");
+        } catch (error) {
+          console.error("Failed to finish bank connection:", error);
+          alert("The bank was linked, but the app could not finish the exchange step. Check your backend routes next.");
+        }
+      },
+      onExit: function (error) {
+        if (error) {
+          console.error("Plaid Link exited with error:", error);
+          alert("Bank connection did not finish. Make sure the Plaid sandbox backend is configured correctly.");
+        }
+      },
+    });
+
+    handler.open();
+  } catch (error) {
+    console.error("Live bank setup is not ready:", error);
+    alert("Direct bank connection needs a tiny backend first. Add Plaid sandbox endpoints at /api/plaid/create_link_token and /api/plaid/exchange_public_token, then try again.");
+  }
+}
+
 function renderAutomationStatus() {
   if (!el.automationStatusCard) return;
 
-  const hasAccess = getAutomationAccessEnabled();
-  const planLabel = isPremiumEnabled() ? "Premium" : "Free";
-  const trialText = hasActiveTrial()
-    ? `${getTrialDaysRemaining()} day${getTrialDaysRemaining() === 1 ? "" : "s"} left`
-    : subscriptionState.trialUsed
-      ? "Used"
-      : "Not started";
+  const connected = Boolean(subscriptionState.bankSyncEnabled);
+  const bankName = subscriptionState.linkedInstitution || "Not connected";
 
-  if (el.automationPlanLabel) el.automationPlanLabel.textContent = planLabel;
-  if (el.automationTrialLabel) el.automationTrialLabel.textContent = trialText;
-
-  el.automationStatusCard.className = `automation-status-card ${hasAccess ? "is-premium" : "is-locked"}`;
-
-  if (hasAccess) {
-    setHtml(
-      el.automationStatusCard,
-      `
-        <strong>Automation is unlocked.</strong>
-        <div class="automation-note">
-          Right now this uses a mock transaction engine so we can finish the workflow before wiring in a real bank connection.
-        </div>
-      `,
-    );
-  } else {
-    setHtml(
-      el.automationStatusCard,
-      `
-        <strong>Automation is locked on the free plan.</strong>
-        <div class="automation-note">
-          Free users can still use the full manual planner. Premium only adds automation and convenience.
-        </div>
-      `,
-    );
-  }
+  el.automationStatusCard.className = `automation-status-card ${connected ? "is-premium" : "is-locked"}`;
+  setHtml(
+    el.automationStatusCard,
+    connected
+      ? `<strong>Live bank sync is connected.</strong><div class="automation-note">${escapeHtml(bankName)} is linked. Run sync again anytime you want to refresh current balance and recent transactions.</div>`
+      : `<strong>Live bank sync is not connected yet.</strong><div class="automation-note">This app is wired for a real Plaid sandbox connection, but it still needs a tiny backend to create and exchange Link tokens.</div>`,
+  );
 
   const sourceLine = `<div class="automation-note">Current forecast source: <strong>${escapeHtml(getForecastSourceDisplayLabel())}</strong></div>`;
   el.automationStatusCard.insertAdjacentHTML("beforeend", sourceLine);
-
-  if (el.togglePremiumBtn) {
-    el.togglePremiumBtn.textContent = isPremiumEnabled()
-      ? "Switch to Free"
-      : "Switch to Premium";
-  }
 }
 
 function renderAutomationActivitySummary() {
@@ -2643,53 +2657,25 @@ function renderAutomationActivitySummary() {
 
   const linkedInstitution = subscriptionState.linkedInstitution || "Not connected";
   const importedNextPayDate = getImportedForecastNextPayDate();
-  const importedAmount = hasImportedForecastIncome()
-    ? formatCurrency(forecastIncomeSource.importedAmount)
-    : "—";
+  const importedAmount = hasImportedForecastIncome() ? formatCurrency(forecastIncomeSource.importedAmount) : "—";
   const lastTransaction = getTransactionsSorted().slice(-1)[0] || null;
-  const lastTransactionText = lastTransaction
-    ? `${lastTransaction.name} • ${formatCurrency(lastTransaction.amount)}`
-    : "No transactions loaded";
+  const lastTransactionText = lastTransaction ? `${lastTransaction.name} • ${formatCurrency(lastTransaction.amount)}` : "No transactions loaded";
 
   setHtml(
     el.automationActivitySummary,
     `
       <div class="source-status-grid">
-        <div class="source-status-item">
-          <span class="source-status-label">Connected account</span>
-          <div class="source-status-value">${escapeHtml(linkedInstitution)}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Last sync</span>
-          <div class="source-status-value">${escapeHtml(formatDateTime(subscriptionState.lastSyncAt))}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Transactions loaded</span>
-          <div class="source-status-value">${transactions.length}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Last scan</span>
-          <div class="source-status-value">${escapeHtml(formatDateTime(automationScanState.lastScanAt))}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Income candidates</span>
-          <div class="source-status-value">${automationScanState.incomeCandidateCount || incomeImportSuggestions.length}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Bill candidates</span>
-          <div class="source-status-value">${automationScanState.billCandidateCount || billImportSuggestions.length}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Imported paycheck</span>
-          <div class="source-status-value">${escapeHtml(importedAmount)}</div>
-        </div>
-        <div class="source-status-item">
-          <span class="source-status-label">Imported next payday</span>
-          <div class="source-status-value">${importedNextPayDate ? escapeHtml(formatDate(importedNextPayDate)) : "—"}</div>
-        </div>
+        <div class="source-status-item"><span class="source-status-label">Connected account</span><div class="source-status-value">${escapeHtml(linkedInstitution)}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Last sync</span><div class="source-status-value">${escapeHtml(formatDateTime(subscriptionState.lastSyncAt))}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Transactions loaded</span><div class="source-status-value">${transactions.length}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Last scan</span><div class="source-status-value">${escapeHtml(formatDateTime(automationScanState.lastScanAt))}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Income candidates</span><div class="source-status-value">${automationScanState.incomeCandidateCount || incomeImportSuggestions.length}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Bill candidates</span><div class="source-status-value">${automationScanState.billCandidateCount || billImportSuggestions.length}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Imported paycheck</span><div class="source-status-value">${escapeHtml(importedAmount)}</div></div>
+        <div class="source-status-item"><span class="source-status-label">Imported next payday</span><div class="source-status-value">${importedNextPayDate ? escapeHtml(formatDate(importedNextPayDate)) : "—"}</div></div>
       </div>
       <div class="source-status-note">Latest transaction seen: <strong>${escapeHtml(lastTransactionText)}</strong></div>
-      <div class="source-status-note">Use <strong>Load Mock Transactions</strong> to load a sample transaction history, then use <strong>Re-Scan Transactions</strong> to regenerate paycheck and bill suggestions.</div>
+      <div class="source-status-note">For live bank sync, wire the Plaid sandbox backend routes first. Until then, you can still load demo transactions to test paycheck and bill detection.</div>
     `,
   );
 
@@ -2697,7 +2683,6 @@ function renderAutomationActivitySummary() {
     el.useImportedForecastBtn.disabled = !hasImportedForecastIncome();
   }
 }
-
 
 function renderIncomeSourceControlSummary() {
   if (!el.incomeSourceControlSummary) return;
@@ -3229,103 +3214,7 @@ function renderWorkPlannerSummary() {
 }
 
 function renderBuckets() {
-  if (!el.bucketList) return;
-
-  el.bucketList.innerHTML = "";
-
-  if (spendingBuckets.length === 0) {
-    setHtml(
-      el.bucketList,
-      `<li class="timeline-empty">No spending buckets added yet.</li>`,
-    );
-    return;
-  }
-
-  for (let i = 0; i < spendingBuckets.length; i++) {
-    const bucket = spendingBuckets[i];
-
-    const li = document.createElement("li");
-    li.className = "bill-item";
-
-    li.innerHTML = `
-      <div class="bill-main">
-        <div class="bill-top-row">
-          <div class="bill-title-wrap">
-            <div class="bill-title-line">
-              <div class="bill-title">${bucket.name}</div>
-              <span class="bill-chip bill-chip-status-neutral">Bucket</span>
-            </div>
-
-            <div class="bill-meta">
-              <span class="bill-chip">${formatCategory(bucket.category || "other")}</span>
-              <span class="bill-chip bill-chip-soft">${formatFrequency(bucket.frequency)}</span>
-            </div>
-          </div>
-
-          <div class="bill-amount-wrap">
-            <div class="bill-amount">${formatCurrency(bucket.amount)}</div>
-            <div class="bill-amount-label">Planned spending</div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    const buttonGroup = document.createElement("div");
-    buttonGroup.className = "bill-actions";
-
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "Edit";
-    editBtn.className = "edit-btn";
-    editBtn.addEventListener("click", function () {
-      el.bucketNameInput.value = bucket.name;
-      el.bucketAmountInput.value = bucket.amount;
-      if (el.bucketCategoryInput)
-        el.bucketCategoryInput.value = bucket.category || "other";
-      el.bucketFrequencyInput.value = bucket.frequency || "weekly";
-
-      bucketEditIndex = i;
-      enterBucketEditMode();
-    });
-
-    const duplicateBtn = document.createElement("button");
-    duplicateBtn.textContent = "Duplicate";
-    duplicateBtn.className = "secondary-btn";
-    duplicateBtn.addEventListener("click", function () {
-      const nowIso = new Date().toISOString();
-      const clonedBucket = {
-        ...bucket,
-        name: `${bucket.name} Copy`,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      spendingBuckets.push(clonedBucket);
-      refreshApp();
-    });
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "Delete";
-    deleteBtn.className = "delete-btn";
-    deleteBtn.addEventListener("click", function () {
-      const confirmed = confirm(`Delete bucket "${bucket.name}"?`);
-      if (!confirmed) return;
-
-      spendingBuckets.splice(i, 1);
-
-      if (bucketEditIndex === i) {
-        clearBucketForm();
-      } else if (bucketEditIndex !== null && i < bucketEditIndex) {
-        bucketEditIndex--;
-      }
-
-      refreshApp();
-    });
-
-    buttonGroup.appendChild(editBtn);
-    buttonGroup.appendChild(duplicateBtn);
-    buttonGroup.appendChild(deleteBtn);
-    li.appendChild(buttonGroup);
-    el.bucketList.appendChild(li);
-  }
+  if (!ENABLE_SPENDING_BUCKETS || !el.bucketList) return;
 }
 
 function renderBillsOverview() {
@@ -5534,27 +5423,18 @@ function getPaystubHistoryEstimate() {
   const averageWorkGross = getAverageFromHistory(validEntries, function (entry) {
     return entry.workGross || entry.taxableGross || entry.gross;
   });
-  const averageRegularHours = getAverageFromHistory(
-    validEntries,
-    function (entry) {
-      return entry.regularHours;
-    },
-  );
-  const averageOvertimeHours = getAverageFromHistory(
-    validEntries,
-    function (entry) {
-      return entry.overtimeHours;
-    },
-  );
-  const averageTaxes = getAverageFromHistory(validEntries, function (entry) {
-    return entry.taxTotal;
+  const averageRegularHours = getAverageFromHistory(validEntries, function (entry) {
+    return entry.regularHours;
   });
-  const averageDeductions = getAverageFromHistory(
-    validEntries,
-    function (entry) {
-      return entry.deductionTotal;
-    },
-  );
+  const averageOvertimeHours = getAverageFromHistory(validEntries, function (entry) {
+    return entry.overtimeHours;
+  });
+  const averageDeductions = getAverageFromHistory(validEntries, function (entry) {
+    const gross = safeNumber(entry.gross);
+    const net = safeNumber(entry.net);
+    const drag = gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
+    return Math.max(safeNumber(entry.deductionTotal), drag);
+  });
   const averageRegularRate = getAverageFromHistory(validEntries, function (entry) {
     return entry.regularRate;
   });
@@ -5569,11 +5449,12 @@ function getPaystubHistoryEstimate() {
     return workGross > 0 ? safeNumber(entry.retirement401k) / workGross : 0;
   });
   const averageFixedOtherDeductions = getAverageFromHistory(validEntries, function (entry) {
-    return entry.fixedOtherDeductions || Math.max(0, safeNumber(entry.deductionTotal) - safeNumber(entry.taxTotal) - safeNumber(entry.retirement401k));
+    return entry.fixedOtherDeductions || Math.max(0, safeNumber(entry.deductionTotal) - safeNumber(entry.retirement401k));
   });
-  const averageTaxRateOnWorkGross = getAverageFromHistory(validEntries, function (entry) {
+  const averageDeductionRateOnWorkGross = getAverageFromHistory(validEntries, function (entry) {
     const workGross = safeNumber(entry.workGross || entry.taxableGross || entry.gross);
-    return workGross > 0 ? safeNumber(entry.taxTotal) / workGross : 0;
+    const drag = Math.max(safeNumber(entry.deductionTotal), Math.max(0, safeNumber(entry.gross) - safeNumber(entry.net)));
+    return workGross > 0 ? drag / workGross : 0;
   });
   const averageNonWorkEarnings = getAverageFromHistory(validEntries, function (entry) {
     return entry.nonWorkEarnings || Math.max(0, safeNumber(entry.gross) - safeNumber(entry.workGross || entry.taxableGross || entry.gross));
@@ -5581,8 +5462,7 @@ function getPaystubHistoryEstimate() {
   const averageHours = averageRegularHours + averageOvertimeHours;
   const averageHourlyNet = averageHours > 0 ? averageNet / averageHours : 0;
   const averageHourlyGross = averageHours > 0 ? averageWorkGross / averageHours : 0;
-  const takeHomePercent =
-    averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
+  const takeHomePercent = averageGross > 0 ? (averageNet / averageGross) * 100 : 0;
 
   return {
     count: validEntries.length,
@@ -5596,12 +5476,13 @@ function getPaystubHistoryEstimate() {
     averageHourlyGross,
     averageRegularRate,
     averageOvertimeRate,
-    averageTaxes,
+    averageTaxes: averageDeductions,
     averageDeductions,
     averageRetirement401k,
     averageRetirementRate,
     averageFixedOtherDeductions,
-    averageTaxRateOnWorkGross,
+    averageTaxRateOnWorkGross: averageDeductionRateOnWorkGross,
+    averageDeductionRateOnWorkGross,
     averageNonWorkEarnings,
     takeHomePercent,
   };
@@ -5616,6 +5497,13 @@ function normalizePaystubText(text) {
     .replace(/\u00a0/g, " ")
     .replace(/\r/g, "\n")
     .replace(/[\t]+/g, " ")
+    .replace(/hoursat/gi, " hours at ")
+    .replace(/eamings/gi, "earnings")
+    .replace(/deduc tions/gi, "deductions")
+    .replace(/w\/?h/gi, " withholding ")
+    .replace(/\bdir dep\b/gi, "direct deposit")
+    .replace(/([0-9])([A-Za-z])/g, "$1 $2")
+    .replace(/([A-Za-z])([0-9])/g, "$1 $2")
     .replace(/ +/g, " ")
     .trim();
 }
@@ -5685,7 +5573,7 @@ function extractHoursByLabel(text, labels) {
     for (let r = 0; r < regexes.length; r++) {
       const match = text.match(regexes[r]);
       if (match && match[1] !== undefined) {
-        const value = normalizePaystubHoursValue(match[1]);
+        const value = Math.abs(safeNumber(match[1]));
         if (value > 0) return value;
       }
     }
@@ -5693,6 +5581,22 @@ function extractHoursByLabel(text, labels) {
 
   return 0;
 }
+function normalizePaystubHoursValue(value) {
+  const raw = Math.abs(safeNumber(value));
+  if (!raw) return 0;
+  if (raw > 120 && raw <= 12000) return round2(raw / 100);
+  return round2(raw);
+}
+
+function normalizePaystubRateValue(value) {
+  const raw = Math.abs(safeNumber(value));
+  if (!raw) return 0;
+  if (raw >= 100 && raw <= 10000 && Number.isInteger(raw)) {
+    return round2(raw / 100);
+  }
+  return round2(raw);
+}
+
 function extractPayRateLines(text) {
   const normalized = normalizePaystubText(text);
   const lines = getNormalizedPaystubLines(normalized);
@@ -5721,9 +5625,11 @@ function extractPayRateLines(text) {
     for (let p = 0; p < patterns.length; p++) {
       const match = line.match(patterns[p].regex);
       if (!match) continue;
+
       const hours = normalizePaystubHoursValue(match[1]);
       const rate = normalizePaystubRateValue(match[2]);
-      const pay = round2(Math.abs(safeNumber(match[3])));
+      const pay = fixLikelyMissingDecimal(match[3], { maxReasonable: 5000, minWholeToRepair: 100 });
+
       if (patterns[p].key === "regular") {
         result.regularHours = result.regularHours || hours;
         result.regularRate = result.regularRate || rate;
@@ -5804,52 +5710,90 @@ function setPaystubOcrStatus(message, tone) {
   el.paystubOcrStatus.textContent = message;
 }
 
+async function fileToImageBitmap(file) {
+  if (typeof createImageBitmap === "function") {
+    return await createImageBitmap(file);
+  }
+
+  return await new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function preprocessPaystubImage(file) {
+  const source = await fileToImageBitmap(file);
+  const width = source.width || source.naturalWidth || 0;
+  const height = source.height || source.naturalHeight || 0;
+  if (!width || !height) return file;
+
+  const scale = Math.min(2.4, Math.max(1.6, 1800 / Math.max(width, height)));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    gray = gray < 185 ? 0 : 255;
+    data[i] = gray;
+    data[i + 1] = gray;
+    data[i + 2] = gray;
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  return await new Promise(function (resolve) {
+    canvas.toBlob(function (blob) {
+      resolve(blob || file);
+    }, "image/png", 1);
+  });
+}
+
 async function scanPaystubImage() {
   const file = el.paystubImageInput?.files?.[0];
 
   if (!file) {
-    setPaystubOcrStatus(
-      "Choose a paystub image first, then tap Scan Image.",
-      "warning",
-    );
+    setPaystubOcrStatus("Choose a paystub image first, then tap Scan Image.", "warning");
     return;
   }
 
   if (typeof Tesseract === "undefined") {
-    setPaystubOcrStatus(
-      "OCR library failed to load. Refresh once and try again.",
-      "danger",
-    );
+    setPaystubOcrStatus("OCR library failed to load. Refresh once and try again.", "danger");
     return;
   }
 
   if (el.scanPaystubImageBtn) el.scanPaystubImageBtn.disabled = true;
-  setPaystubOcrStatus(
-    "Scanning image... this can take a few seconds on phone.",
-    "info",
-  );
+  setPaystubOcrStatus("Scanning image... this can take a few seconds on phone.", "info");
 
   try {
-    const result = await Tesseract.recognize(file, "eng", {
+    const processedImage = await preprocessPaystubImage(file);
+    const result = await Tesseract.recognize(processedImage || file, "eng", {
       logger: function (message) {
         if (!el.paystubOcrStatus) return;
-        if (
-          message.status === "recognizing text" &&
-          typeof message.progress === "number"
-        ) {
+        if (message.status === "recognizing text" && typeof message.progress === "number") {
           const percent = Math.round(message.progress * 100);
           setPaystubOcrStatus(`Scanning image... ${percent}%`, "info");
         }
       },
+      config: { preserve_interword_spaces: "1", tessedit_pageseg_mode: "6" },
     });
 
     const extractedText = normalizePaystubText(result?.data?.text || "");
-
     if (!extractedText) {
-      setPaystubOcrStatus(
-        "No readable text was found. Try a clearer screenshot or cropped paystub image.",
-        "warning",
-      );
+      setPaystubOcrStatus("No readable text was found. Try a flatter screenshot, darker text, or a tighter crop around just the paystub table.", "warning");
       return;
     }
 
@@ -5863,22 +5807,13 @@ async function scanPaystubImage() {
     saveData();
 
     if (latestParsedPaystub) {
-      setPaystubOcrStatus(
-        "Image scanned successfully. Review the extracted values below, then save the parsed paystub if it looks right.",
-        "good",
-      );
+      setPaystubOcrStatus("Image scanned successfully. Review the extracted values below, then save the parsed paystub if it looks right.", "good");
     } else {
-      setPaystubOcrStatus(
-        "Text was extracted, but the parser could not confidently map the fields yet. Review the OCR text and tap Analyze Extracted Text if needed.",
-        "warning",
-      );
+      setPaystubOcrStatus("Text was extracted, but the parser could not confidently map the fields yet. Review the OCR text and tap Analyze Extracted Text if needed.", "warning");
     }
   } catch (error) {
     console.error("Paystub OCR failed:", error);
-    setPaystubOcrStatus(
-      "OCR failed on this image. Try a flatter screenshot, better lighting, or a tighter crop around the paystub.",
-      "danger",
-    );
+    setPaystubOcrStatus("OCR failed on this image. Try a flatter screenshot, better lighting, or a tighter crop around the paystub.", "danger");
   } finally {
     isProgrammaticPaystubUpdate = false;
     if (el.scanPaystubImageBtn) el.scanPaystubImageBtn.disabled = false;
@@ -6004,15 +5939,7 @@ function getPaystubValidationWarnings(parsed) {
   if (!parsed) return warnings;
 
   if (parsed.gross > 0 && parsed.net > parsed.gross) {
-    warnings.push(
-      "Net pay is higher than gross pay, so one of those values may be wrong.",
-    );
-  }
-
-  if (parsed.taxTotal > parsed.gross * 0.5) {
-    warnings.push(
-      "Taxes look unusually high for this gross pay. One or more decimals may be missing.",
-    );
+    warnings.push("Net pay is higher than gross pay, so one of those values may be wrong.");
   }
 
   if (parsed.regularHours > 80) {
@@ -6024,23 +5951,13 @@ function getPaystubValidationWarnings(parsed) {
   }
 
   const difference = round2(parsed.gross - parsed.net);
-  const expected = round2(parsed.taxTotal + parsed.deductionTotal);
-
-  if (
-    parsed.gross > 0 &&
-    parsed.net > 0 &&
-    expected > 0 &&
-    Math.abs(difference - expected) > 25
-  ) {
-    warnings.push(
-      "Gross minus net does not line up closely with total deductions.",
-    );
+  const expected = round2(parsed.deductionTotal || difference);
+  if (parsed.gross > 0 && parsed.net > 0 && expected > 0 && Math.abs(difference - expected) > 25) {
+    warnings.push("Gross minus net does not line up closely with the total deductions found.");
   }
 
   if (!parsed.payDate) {
-    warnings.push(
-      "Pay date was not confidently detected. That is okay, but save it only if the numbers look right.",
-    );
+    warnings.push("Pay date was not confidently detected. That is okay, but save it only if the numbers look right.");
   }
 
   return warnings;
@@ -6055,7 +5972,7 @@ function parsePaystubText(text) {
 
   function directAmount(pattern) {
     const match = normalized.match(pattern);
-    return match ? normalizePaystubHoursValue(match[1]) : 0;
+    return match ? Math.abs(safeNumber(match[1])) : 0;
   }
 
   function directHours(pattern) {
@@ -6069,14 +5986,7 @@ function parsePaystubText(text) {
     directAmount(/gross wages\s+([\d.,]+)/i) ||
     directAmount(/gross pay\s+([\d.,]+)/i) ||
     directAmount(/(?:^|\n)gross [^\n\r]*?([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, [
-      "gross earnings",
-      "gross pay",
-      "gross wages",
-      "gross amount",
-      "total gross",
-      "gross",
-    ]);
+    extractAmountByLabel(normalized, ["gross earnings", "gross pay", "gross wages", "gross amount", "total gross", "gross"]);
 
   const explicitTotalEarnings =
     directAmount(/total eamings\s+([\d.,]+)/i) ||
@@ -6084,34 +5994,20 @@ function parsePaystubText(text) {
     extractAmountByLabel(normalized, ["total earnings", "total eamings"]);
 
   const regularHours =
-    payLines.regularHours ||
-    directHours(/hours regular time hours\s+([\d.,]+)/i) ||
-    directHours(/regular time hours\s+([\d.,]+)/i) ||
-    directHours(/(?:^|\n)\s*([\d.,]+)\s*r[\s-]?t\b/i) ||
-    extractHoursByLabel(normalized, [
-      "regular time hours",
-      "regular hours",
-      "reg hours",
-      "regular hrs",
-      "hours worked",
-      "worked hours",
-    ]);
+    normalizePaystubHoursValue(payLines.regularHours) ||
+    normalizePaystubHoursValue(directHours(/hours regular time hours\s+([\d.,]+)/i)) ||
+    normalizePaystubHoursValue(directHours(/regular time hours\s+([\d.,]+)/i)) ||
+    normalizePaystubHoursValue(directHours(/(?:^|\n)\s*([\d.,]+)\s*r[\s-]?t\b/i)) ||
+    normalizePaystubHoursValue(extractHoursByLabel(normalized, ["regular time hours", "regular hours", "reg hours", "regular hrs", "hours worked", "worked hours"]));
 
   const overtimeHours =
-    payLines.overtimeHours ||
-    directHours(/time and one half hours\s+([\d.,]+)/i) ||
-    directHours(/(?:^|\n)\s*([\d.,]+)\s*t[\s-]?h\b/i) ||
-    extractHoursByLabel(normalized, [
-      "time and one half hours",
-      "overtime hours",
-      "ot hours",
-      "ot hrs",
-      "overtime hrs",
-      "overtime",
-    ]);
+    normalizePaystubHoursValue(payLines.overtimeHours) ||
+    normalizePaystubHoursValue(directHours(/time and one half hours\s+([\d.,]+)/i)) ||
+    normalizePaystubHoursValue(directHours(/(?:^|\n)\s*([\d.,]+)\s*t[\s-]?h\b/i)) ||
+    normalizePaystubHoursValue(extractHoursByLabel(normalized, ["time and one half hours", "overtime hours", "ot hours", "ot hrs", "overtime hrs", "overtime"]));
 
-  const regularRate = round2(payLines.regularRate || 0);
-  const overtimeRate = round2(payLines.overtimeRate || 0);
+  const regularRate = normalizePaystubRateValue(payLines.regularRate || 0);
+  const overtimeRate = normalizePaystubRateValue(payLines.overtimeRate || 0);
   const regularPay = round2(payLines.regularPay || (regularHours > 0 && regularRate > 0 ? regularHours * regularRate : 0));
   const overtimePay = round2(payLines.overtimePay || (overtimeHours > 0 && overtimeRate > 0 ? overtimeHours * overtimeRate : 0));
   const workGross = round2(explicitGrossEarnings || regularPay + overtimePay || 0);
@@ -6121,42 +6017,20 @@ function parsePaystubText(text) {
     directAmount(/net pay\s*[:#=()\-]*\s*\$?\s*([\d.,]+)/i) ||
     directAmount(/for the amount of\s+\$?\s*([\d.,]+)/i) ||
     directAmount(/direct deposit[^\n\r]*?([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, [
-      "net pay",
-      "net amount",
-      "take home",
-      "take-home",
-      "direct deposit",
-      "net",
-    ]);
+    extractAmountByLabel(normalized, ["net pay", "net amount", "take home", "take-home", "direct deposit", "net"]);
 
-  let federalTax =
-    directAmount(/fed tax\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["fed tax", "federal tax", "federal withholding"]);
-  let stateTax =
-    directAmount(/pa state tax\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["pa state tax", "state tax", "state withholding"]);
+  let federalTax = directAmount(/fed tax\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["fed tax", "federal tax", "federal withholding"]);
+  let stateTax = directAmount(/pa state tax\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["pa state tax", "state tax", "state withholding"]);
   let localTax =
     directAmount(/pa franconia twp\/montgomery\s+([\d.,]+)/i) ||
     directAmount(/local w\/h tax\s+([\d.,]+)/i) ||
     extractAmountByLabel(normalized, ["pa franconia twp/montgomery", "local w/h tax", "local tax", "township tax", "municipal tax", "city tax", "school tax"]);
-  let socialSecurity =
-    directAmount(/soc sec\s+([\d.,]+)/i) ||
-    directAmount(/fica\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["social security", "soc sec", "fica ss", "fica"]);
-  let medicare =
-    directAmount(/medicare\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["medicare", "fica med"]);
-  let hsa =
-    directAmount(/hsa deduct\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["hsa deduct", "hsa", "health savings"]);
-  let retirement401k =
-    directAmount(/401k empee\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["401k empee", "401k employee", "401k", "401(k)", "retirement"]);
+  let socialSecurity = directAmount(/soc sec\s+([\d.,]+)/i) || directAmount(/fica\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["social security", "soc sec", "fica ss", "fica"]);
+  let medicare = directAmount(/medicare\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["medicare", "fica med"]);
+  let hsa = directAmount(/hsa deduct\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["hsa deduct", "hsa", "health savings"]);
+  let retirement401k = directAmount(/401k empee\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["401k empee", "401k employee", "401k", "401(k)", "retirement"]);
   const medical = extractAmountByLabel(normalized, ["medical", "health insurance", "dental", "vision"]);
-  let advance =
-    directAmount(/advance deduct\s+([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["advance deduct", "advance"]);
+  let advance = directAmount(/advance deduct\s+([\d.,]+)/i) || extractAmountByLabel(normalized, ["advance deduct", "advance"]);
   const bonus = extractAmountByLabel(normalized, ["bonus", "incentive", "commission"]);
 
   if (!federalTax) federalTax = collectLineAmounts(lines, [/\bfed(?:eral)?\b/i], { maxReasonable: 250 });
@@ -6177,27 +6051,21 @@ function parsePaystubText(text) {
   retirement401k = fixLikelyMissingDecimal(retirement401k, { maxReasonable: 500 });
   advance = fixLikelyMissingDecimal(advance, { maxReasonable: 1000 });
 
-  const taxTotal = round2(federalTax + stateTax + localTax + socialSecurity + medicare);
-  const explicitTotalDeductions =
-    directAmount(/total deductions[^\n\r]*?([\d.,]+)/i) ||
-    extractAmountByLabel(normalized, ["total deductions"]);
+  const explicitTotalDeductions = directAmount(/total deductions[^\n\r]*?([\d.,]+)/i) || extractAmountByLabel(normalized, ["total deductions", "total deduction", "deduction total", "total withholding"]);
+  const rawTaxTotal = round2(federalTax + stateTax + localTax + socialSecurity + medicare);
+  const grossNetDrag = gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
+
   let deductionTotal = explicitTotalDeductions > 0
     ? fixLikelyMissingDecimal(explicitTotalDeductions, { maxReasonable: 5000, minWholeToRepair: 1000 })
-    : hsa + retirement401k + medical + advance;
+    : round2(hsa + retirement401k + medical + advance);
 
-  const fallbackDifference = gross > 0 && net > 0 ? Math.max(0, gross - net) : 0;
-  if ((!deductionTotal || deductionTotal < fallbackDifference - taxTotal) && fallbackDifference > 0) {
-    deductionTotal = Math.max(0, fallbackDifference - taxTotal);
-  }
-  if (!net && gross > 0) {
-    net = round2(Math.max(0, gross - taxTotal - deductionTotal));
-  }
-  if (!gross && net > 0) {
-    gross = round2(net + taxTotal + deductionTotal);
-  }
+  if (grossNetDrag > 0) deductionTotal = Math.max(deductionTotal, grossNetDrag);
+  if (!net && gross > 0 && deductionTotal > 0) net = round2(Math.max(0, gross - deductionTotal));
+  if (!gross && net > 0 && deductionTotal > 0) gross = round2(net + deductionTotal);
 
+  const taxTotal = round2(Math.min(rawTaxTotal, deductionTotal));
   const nonWorkEarnings = round2(Math.max(0, gross - workGross));
-  const fixedOtherDeductions = round2(Math.max(0, deductionTotal - taxTotal - retirement401k));
+  const fixedOtherDeductions = round2(Math.max(0, deductionTotal - retirement401k));
   const retirementRate = workGross > 0 ? round2((retirement401k / workGross) * 100) : 0;
   const totalHours = round2(regularHours + overtimeHours);
   const takeHomePercent = gross > 0 ? (net / gross) * 100 : 0;
@@ -6250,10 +6118,7 @@ function renderPaystubAnalysis() {
   if (!el.paystubAnalysisResults) return;
 
   if (!latestParsedPaystub) {
-    setHtml(
-      el.paystubAnalysisResults,
-      '<p class="timeline-empty">Upload a paystub image or paste paystub text to extract gross pay, net pay, taxes, deductions, hours, and a take-home estimate.</p>',
-    );
+    setHtml(el.paystubAnalysisResults, '<p class="timeline-empty">Upload a paystub image or paste paystub text to extract gross pay, net pay, hours, deductions, and a take-home estimate.</p>');
     if (el.addParsedPaystubBtn) el.addParsedPaystubBtn.disabled = true;
     return;
   }
@@ -6264,44 +6129,20 @@ function renderPaystubAnalysis() {
     el.paystubAnalysisResults,
     `
       <div class="estimate-results-grid">
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Gross Pay</span>
-          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.gross)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Net Pay</span>
-          <span class="estimate-result-value ${getBalanceStatus(latestParsedPaystub.net)}">${formatCurrency(latestParsedPaystub.net)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Take-Home %</span>
-          <span class="estimate-result-value">${latestParsedPaystub.takeHomePercent.toFixed(1)}%</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Regular / OT Hours</span>
-          <span class="estimate-result-value">${latestParsedPaystub.regularHours.toFixed(2)} / ${latestParsedPaystub.overtimeHours.toFixed(2)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Taxes Found</span>
-          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.taxTotal)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Deductions Found</span>
-          <span class="estimate-result-value">${formatCurrency(latestParsedPaystub.deductionTotal)}</span>
-        </div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Gross Pay</span><span class="estimate-result-value">${formatCurrency(latestParsedPaystub.gross)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Net Pay</span><span class="estimate-result-value ${getBalanceStatus(latestParsedPaystub.net)}">${formatCurrency(latestParsedPaystub.net)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Take-Home %</span><span class="estimate-result-value">${latestParsedPaystub.takeHomePercent.toFixed(1)}%</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Regular / OT Hours</span><span class="estimate-result-value">${latestParsedPaystub.regularHours.toFixed(2)} / ${latestParsedPaystub.overtimeHours.toFixed(2)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Total Deductions</span><span class="estimate-result-value">${formatCurrency(latestParsedPaystub.deductionTotal)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">401(k) + HSA Found</span><span class="estimate-result-value">${formatCurrency(latestParsedPaystub.retirement401k + latestParsedPaystub.hsa)}</span></div>
       </div>
-      ${
-        latestParsedPaystub.validationWarnings &&
-        latestParsedPaystub.validationWarnings.length
-          ? `<div class="warning-box warning-box-warning" style="margin-top:12px;"><strong>Double-check these fields</strong><ul style="margin:8px 0 0 18px;">${latestParsedPaystub.validationWarnings.map(function (item) { return `<li>${item}</li>`; }).join("")}</ul></div>`
-          : `<div class="warning-box warning-box-good" style="margin-top:12px;">No obvious parser red flags were found on this paystub.</div>`
-      }
+      ${latestParsedPaystub.validationWarnings && latestParsedPaystub.validationWarnings.length ? `<div class="warning-box warning-box-warning" style="margin-top:12px;"><strong>Double-check these fields</strong><ul style="margin:8px 0 0 18px;">${latestParsedPaystub.validationWarnings.map(function (item) { return `<li>${item}</li>`; }).join("")}</ul></div>` : `<div class="warning-box warning-box-good" style="margin-top:12px;">No obvious parser red flags were found on this paystub.</div>`}
       <div class="planner-chip-row">
         <span class="planner-chip">${latestParsedPaystub.payDate ? `Pay date ${formatDate(latestParsedPaystub.payDate)}` : "Pay date not detected"}</span>
         <span class="planner-chip">Effective hourly net ${formatCurrency(latestParsedPaystub.effectiveHourlyNet)}</span>
         <span class="planner-chip">Effective hourly gross ${formatCurrency(latestParsedPaystub.effectiveHourlyGross)}</span>
         <span class="planner-chip">HSA ${formatCurrency(latestParsedPaystub.hsa)}</span>
         <span class="planner-chip">401(k) ${formatCurrency(latestParsedPaystub.retirement401k)}</span>
-        <span class="planner-chip">Local tax ${formatCurrency(latestParsedPaystub.localTax)}</span>
         ${latestParsedPaystub.bonus > 0 ? `<span class="planner-chip">Bonus ${formatCurrency(latestParsedPaystub.bonus)}</span>` : ""}
       </div>
     `,
@@ -6311,15 +6152,12 @@ function renderPaystubAnalysis() {
 function renderPaystubHistory() {
   if (el.paystubHistoryList) {
     if (!paystubHistory.length) {
-      el.paystubHistoryList.innerHTML =
-        '<li class="timeline-empty">No paystubs saved yet. Add a parsed stub to build better paycheck and work-hour estimates.</li>';
+      el.paystubHistoryList.innerHTML = '<li class="timeline-empty">No paystubs saved yet. Add a parsed stub to build better paycheck and work-hour estimates.</li>';
     } else {
       el.paystubHistoryList.innerHTML = paystubHistory
         .slice()
         .sort(function (a, b) {
-          return (b.payDate || b.createdAt || "").localeCompare(
-            a.payDate || a.createdAt || "",
-          );
+          return (b.payDate || b.createdAt || "").localeCompare(a.payDate || a.createdAt || "");
         })
         .map(function (entry, index) {
           return `
@@ -6335,13 +6173,11 @@ function renderPaystubHistory() {
                     <div class="bill-meta">
                       <span class="bill-chip bill-chip-soft">${entry.totalHours ? `${entry.totalHours.toFixed(2)} hrs` : "Hours not found"}</span>
                       <span class="bill-chip bill-chip-soft">${entry.takeHomePercent.toFixed(1)}% keep rate</span>
-                      <span class="bill-chip bill-chip-soft">${formatCurrency(entry.taxTotal)} taxes</span>
+                      <span class="bill-chip bill-chip-soft">${formatCurrency(entry.deductionTotal)} deductions</span>
                       <span class="bill-chip bill-chip-soft">${formatCurrency(entry.retirement401k)} 401(k)</span>
                     </div>
                   </div>
-                  <div class="bill-actions">
-                    <button type="button" class="secondary-btn delete-btn" data-paystub-delete="${entry.id}">Delete</button>
-                  </div>
+                  <div class="bill-actions"><button type="button" class="secondary-btn delete-btn" data-paystub-delete="${entry.id}">Delete</button></div>
                 </div>
               </div>
             </li>
@@ -6355,10 +6191,7 @@ function renderPaystubHistory() {
 
   const estimate = getPaystubHistoryEstimate();
   if (!estimate) {
-    setHtml(
-      el.paystubHistorySummary,
-      '<p class="timeline-empty">Save at least one paystub to build an average paycheck model from your real taxes, deductions, HSA, local taxes, and 401(k) drag.</p>',
-    );
+    setHtml(el.paystubHistorySummary, '<p class="timeline-empty">Save at least one paystub to build an average paycheck model from your real gross-to-net drag and hours worked.</p>');
     if (el.usePaystubAverageBtn) el.usePaystubAverageBtn.disabled = true;
     return;
   }
@@ -6369,42 +6202,19 @@ function renderPaystubHistory() {
     el.paystubHistorySummary,
     `
       <div class="estimate-results-grid">
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Paystubs Used</span>
-          <span class="estimate-result-value">${estimate.count}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Average Gross</span>
-          <span class="estimate-result-value">${formatCurrency(estimate.averageGross)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Average Net</span>
-          <span class="estimate-result-value">${formatCurrency(estimate.averageNet)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Average Total Hours</span>
-          <span class="estimate-result-value">${estimate.averageHours.toFixed(2)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Avg Taxes + Withholding</span>
-          <span class="estimate-result-value">${formatCurrency(estimate.averageTaxes)}</span>
-        </div>
-        <div class="estimate-result-card">
-          <span class="estimate-result-label">Avg Deductions</span>
-          <span class="estimate-result-value">${formatCurrency(estimate.averageDeductions)}</span>
-        </div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Paystubs Used</span><span class="estimate-result-value">${estimate.count}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Average Gross</span><span class="estimate-result-value">${formatCurrency(estimate.averageGross)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Average Net</span><span class="estimate-result-value">${formatCurrency(estimate.averageNet)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Average Total Hours</span><span class="estimate-result-value">${estimate.averageHours.toFixed(2)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Avg Gross-Net Drag</span><span class="estimate-result-value">${formatCurrency(estimate.averageDeductions)}</span></div>
+        <div class="estimate-result-card"><span class="estimate-result-label">Keep Rate</span><span class="estimate-result-value">${estimate.takeHomePercent.toFixed(1)}%</span></div>
       </div>
-      <div class="planner-callout">
-        <strong>More accurate forecast base</strong>
-        <span>Your paystub history suggests a typical take-home rate of ${estimate.takeHomePercent.toFixed(1)}%, about ${formatCurrency(estimate.averageHourlyNet)} net per hour, and ${estimate.averageOvertimeHours.toFixed(2)} average OT hours.</span>
-      </div>
+      <div class="planner-callout"><strong>More accurate forecast base</strong><span>Your paystub history suggests about ${formatCurrency(estimate.averageHourlyNet)} net per hour and ${estimate.averageOvertimeHours.toFixed(2)} average OT hours.</span></div>
     `,
   );
 
   if (el.paystubHistoryList) {
-    const deleteButtons = el.paystubHistoryList.querySelectorAll(
-      "[data-paystub-delete]",
-    );
+    const deleteButtons = el.paystubHistoryList.querySelectorAll("[data-paystub-delete]");
     deleteButtons.forEach(function (button) {
       button.addEventListener("click", function () {
         const id = this.getAttribute("data-paystub-delete");
@@ -7041,6 +6851,8 @@ function advanceRecurringBills() {
     while (billDate < today) {
       if (bill.frequency === "monthly") {
         billDate = addMonthsSafe(billDate, 1);
+      } else if (bill.frequency === "biweekly") {
+        billDate.setDate(billDate.getDate() + 14);
       } else if (bill.frequency === "weekly") {
         billDate.setDate(billDate.getDate() + 7);
       } else if (bill.frequency === "yearly") {
@@ -8311,16 +8123,8 @@ if (el.togglePremiumBtn) {
 }
 
 if (el.connectBankBtn) {
-  el.connectBankBtn.addEventListener("click", function () {
-    if (!getAutomationAccessEnabled()) {
-      alert("Bank automation is part of Premium. For now, start the trial or switch Premium on to test the workflow.");
-      return;
-    }
-
-    subscriptionState.bankSyncEnabled = true;
-    subscriptionState.linkedInstitution = "Mock Checking";
-    subscriptionState.lastSyncAt = new Date().toISOString();
-    refreshApp();
+  el.connectBankBtn.addEventListener("click", async function () {
+    await startLiveBankConnection();
   });
 }
 
