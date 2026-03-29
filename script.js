@@ -2550,7 +2550,7 @@ function normalizeTransactionsFromPlaid(items) {
     return normalizeTransaction({
       id: item.transaction_id || item.id || `tx-plaid-${Date.now()}-${index + 1}`,
       name: item.name || item.merchant_name || item.description || "Transaction",
-      amount: -Math.abs(safeNumber(item.amount || 0)),
+      amount: safeNumber(item.amount || 0),
       date: parseFlexibleDateToInput(item.date || item.authorized_date),
       source: "plaid-live",
       category: item.category?.[0] || detectCategoryFromTransactionName(item.name || item.merchant_name || item.description || ""),
