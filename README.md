@@ -10,7 +10,6 @@ A Progressive Web App (PWA) that helps you plan bills against upcoming paychecks
 - **Cash-flow forecasting** – projected balances over time
 - **Debt strategies** – snowball / avalanche style prioritization
 - **Paystub OCR** – extract data from paystub images (Tesseract.js)
-- **Plaid banking link** (optional) – pull real balances and recent transactions via a local proxy server
 - **Offline-capable PWA** – installable, service worker caching
 
 All primary data lives in the browser (`localStorage`). The optional Node/Express server is only needed when using Plaid.
