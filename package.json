@@ -1,8 +1,8 @@
 {
   "name": "bill-paycheck-planner",
   "version": "1.0.0",
-  "description": "",
-  "main": "plaid-server-start.js",
+  "description": "Paycheck and bill planner PWA with cash-flow forecasting, debt strategies, and paystub OCR",
+  "main": "index.html",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,18 +10,18 @@
     "type": "git",
     "url": "git+https://github.com/Ygolreyui/bill-planner-private.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "pwa",
+    "budget",
+    "paycheck",
+    "bills",
+    "cash-flow",
+    "finance"
+  ],
+  "author": "Ygolreyui",
   "license": "ISC",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/Ygolreyui/bill-planner-private/issues"
   },
-  "homepage": "https://github.com/Ygolreyui/bill-planner-private#readme",
-  "dependencies": {
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "plaid": "^41.4.0"
-  }
+  "homepage": "https://github.com/Ygolreyui/bill-planner-private#readme"
 }
