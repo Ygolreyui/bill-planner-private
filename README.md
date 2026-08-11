@@ -12,11 +12,11 @@ A Progressive Web App (PWA) that helps you plan bills against upcoming paychecks
 - **Paystub OCR** – extract data from paystub images (Tesseract.js)
 - **Offline-capable PWA** – installable, service worker caching
 
-All primary data lives in the browser (`localStorage`). The optional Node/Express server is only needed when using Plaid.
+All data lives in the browser (`localStorage`). No backend required.
 
-## Quick start (frontend only)
+## Quick start
 
-1. Clone the repo
+1. Clone the repo (or download the files)
 2. Open `index.html` in a modern browser, **or** serve the folder with any static server:
 
 ```bash
